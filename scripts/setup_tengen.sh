@@ -39,6 +39,7 @@ subnet 192.212.4.0 netmask 255.255.255.0 {
 
 # Network 2: Divisi A Scope
 subnet 192.212.2.0 netmask 255.255.255.0 {
+    range 192.212.2.10 192.212.2.35;
     option routers 192.212.2.1;
     option subnet-mask 255.255.255.0;
     option broadcast-address 192.212.2.255;
@@ -46,6 +47,7 @@ subnet 192.212.2.0 netmask 255.255.255.0 {
 
 # Network 3: Divisi B Scope
 subnet 192.212.3.0 netmask 255.255.255.0 {
+    range 192.212.3.10 192.212.3.89;
     option routers 192.212.3.1;
     option subnet-mask 255.255.255.0;
     option broadcast-address 192.212.3.255;

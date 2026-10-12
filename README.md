@@ -223,14 +223,64 @@
 ### Soal
 > Permintaan alamat dari Divisi A dan Divisi B tidak dapat menyeberangi subnet secara langsung. Konfigurasikan jichi sebagai DHCP Relay menuju tengen ([PREFIX IP].4.10), menggunakan eth2 untuk Network 2 dan eth3 untuk Network 3. Buktikan bahwa client dari kedua subnet berhasil memperoleh lease melalui relay.
 
-### Langkah Pengerjaan
-1. Instalasi `isc-dhcp-relay` pada router `jichi`.
-2. Penentuan interfaces relay (`eth2`, `eth3`) dan target DHCP server (`192.212.4.10`).
-3. Pengujian perolehan lease pada client Network 2 dan Network 3.
+### Langkah Pengerjaan dan Implementasi
+
+1. **Prinsip Kerja DHCP Relay**:
+   - Paket DHCP Discover dan Request dikirimkan oleh klien (`itadori` dan `ino`) secara broadcast (`255.255.255.255`).
+   - Router secara default memblokir paket broadcast agar tidak meluber ke subnet lain (*broadcast domain containment*).
+   - Agar klien di Network 2 (`eth2`) dan Network 3 (`eth3`) dapat meminta IP ke DHCP Server `tengen` di Network 4 (`eth4`), router `jichi` harus menjalankan agen perantara (*DHCP Relay Agent* / `dhcrelay`).
+   - `dhcrelay` menangkap paket broadcast dari interface klien, menyisipkan alamat IP antarmuka router penerima ke dalam field `giaddr` (*Gateway IP Address*), lalu meneruskannya secara unicast ke IP server `192.212.4.10`.
+
+2. **Instalasi dan Konfigurasi `isc-dhcp-relay` pada Router `jichi`**:
+   - Skrip otomasi di `/root/setup_jichi.sh`:
+     ```bash
+     # Instalasi isc-dhcp-relay
+     DEBIAN_FRONTEND=noninteractive apt-get update -y
+     DEBIAN_FRONTEND=noninteractive apt-get install -y isc-dhcp-relay
+     ```
+   - Berkas konfigurasi `/etc/default/isc-dhcp-relay`:
+     ```ini
+     SERVERS="192.212.4.10"
+     INTERFACES="eth2 eth3 eth4"
+     OPTIONS=""
+     ```
+     > **Catatan Penting**: Antarmuka yang dideklarasikan mencakup antarmuka downstream klien (`eth2` dan `eth3`) serta antarmuka upstream menuju DHCP Server `tengen` (`eth4`).
+
+3. **Verifikasi Proses Relay Daemon**:
+   - Memastikan daemon `dhcrelay` aktif di router `jichi`:
+     ```bash
+     service isc-dhcp-relay restart
+     ps aux | grep dhcrelay
+     ```
+   - Terlihat daemon berjalan dengan parameter:
+     `/usr/sbin/dhcrelay -q -i eth2 -i eth3 -i eth4 192.212.4.10`
+
+4. **Pengujian Permintaan Lease dari Klien**:
+   - **Klien Network 2 (`itadori`)**:
+     Menjalankan `udhcpc -i eth0 -n -q`. Klien berhasil mendapatkan lease:
+     - IP: `192.212.2.10/24`
+     - Default Gateway: `192.212.2.1` dev `eth0`
+     - Server ID: `192.212.4.10`
+   - **Klien Network 3 (`ino`)**:
+     Menjalankan `udhcpc -i eth0 -n -q`. Klien berhasil mendapatkan lease:
+     - IP: `192.212.3.10/24`
+     - Default Gateway: `192.212.3.1` dev `eth0`
+     - Server ID: `192.212.4.10`
+
+5. **Uji Konektivitas Klien ke Server Melintasi Relay**:
+   - Ping dari `itadori` ke default gateway (`192.212.2.1`) dan server `tengen` (`192.212.4.10`) sukses dengan 0% packet loss.
+   - Ping dari `ino` ke default gateway (`192.212.3.1`) dan server `tengen` (`192.212.4.10`) sukses dengan 0% packet loss.
+   - Pemeriksaan lease database di `tengen` (`/var/lib/dhcp/dhcpd.leases`) mengonfirmasi entri aktif untuk `192.212.2.10` dan `192.212.3.10`.
 
 ### Bukti dan Hasil
-- *Screenshot konfigurasi relay*: `Screenshot/soal-3/relay-conf.png`
-- *Screenshot perolehan IP client*: `Screenshot/soal-3/client-lease.png`
+
+1. **Konfigurasi dan Status Layanan DHCP Relay pada Router `jichi`**:
+   ![Konfigurasi DHCP Relay](Screenshot/soal-3/relay-conf.png)
+   *Menampilkan isi `/etc/default/isc-dhcp-relay` dengan server target `192.212.4.10` dan interface `eth2 eth3 eth4`, serta status proses `dhcrelay` yang berjalan aktif di router `jichi`.*
+
+2. **Perolehan Lease dan Konektivitas Klien Divisi A & Divisi B**:
+   ![Perolehan IP Klien Relay](Screenshot/soal-3/client-lease.png)
+   *Klien `itadori` (Network 2) dan `ino` (Network 3) berhasil memperoleh konfigurasi IP secara otomatis dari DHCP Server `tengen` melalui relay `jichi`, serta terverifikasi memiliki rute default dan konektivitas ping lancar ke gateway dan server.*
 
 ---
 
