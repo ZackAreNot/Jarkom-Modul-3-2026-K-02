@@ -72,3 +72,4 @@ else
     echo "[-] isc-dhcp-server gagal berjalan. Menjalankan fallback daemon langsung..."
     dhcpd -user dhcpd -group dhcpd -4 -cf /etc/dhcp/dhcpd.conf eth0 || true
 fi
+
