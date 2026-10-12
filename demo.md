@@ -66,3 +66,4 @@
 - [ ] **Soal 18**: Matikan `nanami` dan `todo`, request ke `/api` otomatis difailover ke worker cadangan `kirara` tanpa 502.
 - [ ] **Soal 19**: Header cache `X-Cache-Status` MISS pada akses pertama dan HIT pada akses kedua; uji rate limit 10 req/s.
 - [ ] **Soal 20**: Hasil output Apache Benchmark (`ab -n 600 -c 30`) dari terminal `kusakabe`.
+

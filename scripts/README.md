@@ -10,3 +10,4 @@ Direktori ini menampung seluruh skrip bash shell yang akan diinjeksikan ke dalam
 6. **`setup_workers.sh`**: Konfigurasi Nginx & PHP-FPM pada worker frontend (`maki`, `panda`) dan API (`nanami`, `todo`, `kirara`).
 7. **`setup_loadbalancer.sh`**: Konfigurasi Nginx Weighted Round Robin LB pada `geto` dan backup failover `kirara`.
 8. **`setup_reverse_proxy.sh`**: Konfigurasi Public Reverse Proxy pada `gojo` (Path-based routing `/` dan `/api`, caching, rate limiting).
+
