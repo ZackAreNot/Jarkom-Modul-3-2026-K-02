@@ -394,14 +394,97 @@
 ### Soal
 > Setiap tim lapangan memiliki durasi operasi yang berbeda. Pada Network 3, berikan short lease 30 menit (1800 detik) kepada ino dan kusakabe, serta long lease 12 jam (43200 detik) kepada miwa. Gunakan pool short lease [PREFIX IP].3.10–[PREFIX IP].3.89 dan pool long lease [PREFIX IP].3.100–[PREFIX IP].3.199. Sesuaikan default-lease-time dan max-lease-time untuk setiap kelas client. Berikan pula DHCP options berupa DNS [PREFIX IP].1.2 dan [PREFIX IP].1.3, serta domain-search <xxxx>.com.
 
-### Langkah Pengerjaan
-1. Konfigurasi lease time spesifik pada class / pool Network 3.
-2. Penambahan opsi DHCP domain name servers dan domain search `k02.com`.
-3. Verifikasi lease time dan DNS resolver pada klien `ino` dan `miwa`.
+### Langkah Pengerjaan dan Implementasi
+
+1. **Analisis Kebutuhan Durasi Sewa & Opsi Jaringan Network 3**:
+   - Subnet Network 3: `192.212.3.0/24` dengan gateway `192.212.3.1`.
+   - **DHCP Options**:
+     - DNS Server: `192.212.1.2` (`utahime`) dan `192.212.1.3` (`shoko`).
+     - Domain Search: `k02.com` (sesuai kelompok K-02).
+   - **Short Lease Pool (Tim Lapangan Cepat)**:
+     - Klien: `ino` (MAC: `02:42:c1:1e:00:00`) dan `kusakabe` (MAC: `f2:dd:ec:51:c9:cb`).
+     - Rentang Pool: `192.212.3.10` – `192.212.3.89`.
+     - Durasi Sewa: `default-lease-time 1800; max-lease-time 1800;` (30 menit = 1800 detik).
+   - **Long Lease Pool (Tim Lapangan Tetap)**:
+     - Klien: `miwa` (MAC: `02:42:1f:2a:46:00`).
+     - Rentang Pool: `192.212.3.100` – `192.212.3.199`.
+     - Durasi Sewa: `default-lease-time 43200; max-lease-time 43200;` (12 jam = 43200 detik).
+
+2. **Konfigurasi Class & Scope Network 3 pada `tengen` (`/etc/dhcp/dhcpd.conf`)**:
+   ```conf
+   # DHCP Classes untuk Divisi B (Network 3)
+   class "pool-short" {
+       match pick-first-value (option dhcp-client-identifier, hardware);
+   }
+   subclass "pool-short" 1:02:42:c1:1e:00:00;  # ino
+   subclass "pool-short" 1:f2:dd:ec:51:c9:cb;  # kusakabe
+
+   class "pool-long" {
+       match pick-first-value (option dhcp-client-identifier, hardware);
+   }
+   subclass "pool-long" 1:02:42:1f:2a:46:00;  # miwa
+
+   # Network 3: Divisi B Scope
+   subnet 192.212.3.0 netmask 255.255.255.0 {
+       option routers 192.212.3.1;
+       option subnet-mask 255.255.255.0;
+       option broadcast-address 192.212.3.255;
+       option domain-name-servers 192.212.1.2, 192.212.1.3;
+       option domain-search "k02.com";
+       option domain-name "k02.com";
+
+       # Short lease pool: 30 menit (1800 detik) untuk ino dan kusakabe
+       pool {
+           allow members of "pool-short";
+           deny members of "pool-long";
+           default-lease-time 1800;
+           max-lease-time 1800;
+           range 192.212.3.10 192.212.3.89;
+       }
+
+       # Long lease pool: 12 jam (43200 detik) untuk miwa
+       pool {
+           allow members of "pool-long";
+           deny members of "pool-short";
+           default-lease-time 43200;
+           max-lease-time 43200;
+           range 192.212.3.100 192.212.3.199;
+       }
+   }
+   ```
+
+3. **Verifikasi Sintaks & Perolehan Lease Klien**:
+   - Menjalankan `dhcpd -t -cf /etc/dhcp/dhcpd.conf` pada `tengen` $\rightarrow$ syntax valid tanpa galat.
+   - Restart `isc-dhcp-server`.
+   - Permintaan lease klien via `udhcpc`:
+     - **`ino`**: memperoleh IP **`192.212.3.10/24`**, output: `lease time 1800`.
+     - **`kusakabe`**: memperoleh IP **`192.212.3.11/24`**, output: `lease time 1800`.
+     - **`miwa`**: memperoleh IP **`192.212.3.100/24`**, output: `lease time 43200`.
+   - Seluruh klien secara otomatis memperoleh berkas `/etc/resolv.conf`:
+     ```
+     search k02.com
+     nameserver 192.212.1.2
+     nameserver 192.212.1.3
+     ```
+   - Berkas sewa `/var/lib/dhcp/dhcpd.leases` pada `tengen` mencatat selisih timestamp `starts` dan `ends` tepat 30 menit untuk `ino`/`kusakabe` dan 12 jam untuk `miwa`.
 
 ### Bukti dan Hasil
-- *Screenshot konfigurasi lease time*: `Screenshot/soal-5/lease-conf.png`
-- *Screenshot lease info pada client*: `Screenshot/soal-5/client-lease-info.png`
+
+1. **Konfigurasi Lease Time, Class & DHCP Options di Node `tengen`**:
+   ![Konfigurasi Lease Time dan Options](Screenshot/soal-5/lease-conf.png)
+   *Menampilkan konfigurasi `/etc/dhcp/dhcpd.conf` pada Network 3 dengan opsi DNS Server 192.212.1.2 & 192.212.1.3, domain-search k02.com, pool-short (1800s), dan pool-long (43200s).*
+
+2. **Perolehan Short Lease dan DNS Options Klien `ino` & `kusakabe`**:
+   ![Short Lease Client](Screenshot/soal-5/client-short-lease.png)
+   *Klien `ino` dan `kusakabe` menerima IP dari rentang `192.212.3.10`–`192.212.3.89` dengan lease time 1800 detik (30 menit) serta `/etc/resolv.conf` berisi DNS dan search domain yang sesuai.*
+
+3. **Perolehan Long Lease dan DNS Options Klien `miwa`**:
+   ![Long Lease Client](Screenshot/soal-5/client-long-lease.png)
+   *Klien `miwa` menerima IP dari rentang `192.212.3.100`–`192.212.3.199` dengan lease time 43200 detik (12 jam) serta `/etc/resolv.conf` berisi DNS dan search domain yang sesuai.*
+
+4. **Verifikasi Database Sewa di Server `tengen` (`dhcpd.leases`)**:
+   ![Data Lease tengen](Screenshot/soal-5/dhcpd-leases.png)
+   *Tabel lease pada `/var/lib/dhcp/dhcpd.leases` menunjukkan waktu `starts` dan `ends` dengan durasi 1800 detik (30 menit) untuk IP .3.10/.3.11 dan 43200 detik (12 jam) untuk IP .3.100.*
 
 ---
 

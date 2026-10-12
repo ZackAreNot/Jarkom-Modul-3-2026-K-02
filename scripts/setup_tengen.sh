@@ -45,6 +45,19 @@ class "pool-support" {
 subclass "pool-support" 1:02:42:03:14:51:00;  # zenin
 subclass "pool-support" 1:f2:dd:ec:51:c9:cb;  # okkotsu
 
+# DHCP Classes untuk Divisi B (Network 3)
+class "pool-short" {
+    match pick-first-value (option dhcp-client-identifier, hardware);
+}
+subclass "pool-short" 1:02:42:c1:1e:00:00;  # ino
+subclass "pool-short" 1:f2:dd:ec:51:c9:cb;  # kusakabe (default MAC)
+subclass "pool-short" 1:02:42:03:14:53:00;  # kusakabe (alt MAC)
+
+class "pool-long" {
+    match pick-first-value (option dhcp-client-identifier, hardware);
+}
+subclass "pool-long" 1:02:42:1f:2a:46:00;  # miwa
+
 # Network 4: Data Center (Subnet lokal tengen tanpa pool dinamis)
 subnet 192.212.4.0 netmask 255.255.255.0 {
 }
@@ -70,12 +83,32 @@ subnet 192.212.2.0 netmask 255.255.255.0 {
     }
 }
 
-# Network 3: Divisi B Scope
+# Network 3: Divisi B Scope (Short Lease & Long Lease)
 subnet 192.212.3.0 netmask 255.255.255.0 {
-    range 192.212.3.10 192.212.3.89;
     option routers 192.212.3.1;
     option subnet-mask 255.255.255.0;
     option broadcast-address 192.212.3.255;
+    option domain-name-servers 192.212.1.2, 192.212.1.3;
+    option domain-search "k02.com";
+    option domain-name "k02.com";
+
+    # Short lease pool: 30 menit (1800 detik) untuk ino dan kusakabe
+    pool {
+        allow members of "pool-short";
+        deny members of "pool-long";
+        default-lease-time 1800;
+        max-lease-time 1800;
+        range 192.212.3.10 192.212.3.89;
+    }
+
+    # Long lease pool: 12 jam (43200 detik) untuk miwa
+    pool {
+        allow members of "pool-long";
+        deny members of "pool-short";
+        default-lease-time 43200;
+        max-lease-time 43200;
+        range 192.212.3.100 192.212.3.199;
+    }
 }
 EOF
 
