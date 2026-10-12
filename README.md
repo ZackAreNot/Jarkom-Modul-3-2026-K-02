@@ -151,14 +151,68 @@
 ### Soal
 > Tengen, penjaga pusat distribusi di Data Center, harus mengambil alih pengalokasian alamat bagi wilayah yang membutuhkan konfigurasi dinamis. Konfigurasikan isc-dhcp-server pada [PREFIX IP].4.10. Deklarasikan Network 4 ([PREFIX IP].4.0/24) sebagai subnet lokal tanpa pool dinamis, lalu siapkan scope DHCP untuk Network 2 ([PREFIX IP].2.0/24) dan Network 3 ([PREFIX IP].3.0/24). Validasi konfigurasi dan pastikan service aktif tanpa error “No subnet declaration”.
 
-### Langkah Pengerjaan
-1. Instalasi `isc-dhcp-server` pada `tengen`.
-2. Pengaturan file konfigurasi `/etc/dhcp/dhcpd.conf` dengan deklarasi subnet lokal Network 4 serta scope remote Network 2 dan 3.
-3. Verifikasi status service `isc-dhcp-server`.
+### Langkah Pengerjaan dan Implementasi
+
+1. **Instalasi Paket DHCP Server pada Node `tengen` (`192.212.4.10`)**:
+   - Node `tengen` bertindak sebagai DHCP Server sentral di Network 4 (Data Center).
+   - Paket `isc-dhcp-server` diinstal melalui perintah:
+     ```bash
+     apt-get update -y
+     apt-get install -y isc-dhcp-server
+     ```
+
+2. **Penentuan Antarmuka Layanan (`/etc/default/isc-dhcp-server`)**:
+   - Mengarahkan `dhcpd` agar hanya mendengarkan pada antarmuka lokal `eth0`:
+     ```ini
+     INTERFACESv4="eth0"
+     INTERFACESv6=""
+     ```
+
+3. **Penyusunan Berkas Konfigurasi Subnet (`/etc/dhcp/dhcpd.conf`)**:
+   - **Deklarasi Subnet Lokal Network 4 (`192.212.4.0/24`)**:
+     ISC DHCP Server mewajibkan seluruh subnet yang melekat pada antarmuka fisik server dideklarasikan di dalam `dhcpd.conf`. Apabila tidak dideklarasikan, daemon `dhcpd` akan menolak berjalan dengan galat fatal: *"No subnet declaration for eth0 (192.212.4.10)"*. Sesuai instruksi soal, Network 4 dideklarasikan sebagai subnet lokal kosong tanpa rentang (*dynamic pool*):
+     ```conf
+     subnet 192.212.4.0 netmask 255.255.255.0 {
+     }
+     ```
+   - **Persiapan Scope Remote untuk Network 2 dan Network 3**:
+     Mendeklarasikan scope subnet untuk klien Divisi A (Network 2: `192.212.2.0/24`) dan klien Divisi B (Network 3: `192.212.3.0/24`) lengkap dengan parameter default gateway dan broadcast address:
+     ```conf
+     # Network 2: Divisi A Scope
+     subnet 192.212.2.0 netmask 255.255.255.0 {
+         option routers 192.212.2.1;
+         option subnet-mask 255.255.255.0;
+         option broadcast-address 192.212.2.255;
+     }
+
+     # Network 3: Divisi B Scope
+     subnet 192.212.3.0 netmask 255.255.255.0 {
+         option routers 192.212.3.1;
+         option subnet-mask 255.255.255.0;
+         option broadcast-address 192.212.3.255;
+     }
+     ```
+
+4. **Validasi Sintaks & Aktivasi Layanan**:
+   - Menjalankan uji validasi sintaks sebelum memulai layanan:
+     ```bash
+     dhcpd -t -cf /etc/dhcp/dhcpd.conf
+     ```
+   - Memulai ulang layanan dan memastikan daemon aktif:
+     ```bash
+     service isc-dhcp-server restart
+     service isc-dhcp-server status
+     ```
 
 ### Bukti dan Hasil
-- *Screenshot konfigurasi dhcpd.conf*: `Screenshot/soal-2/dhcpd-conf.png`
-- *Screenshot status service*: `Screenshot/soal-2/service-status.png`
+
+1. **Konfigurasi Interface & `dhcpd.conf` pada Node `tengen`**:
+   ![Konfigurasi dhcpd.conf](Screenshot/soal-2/dhcpd-conf.png)
+   *Menampilkan isi `/etc/default/isc-dhcp-server` yang terikat pada `eth0`, serta `/etc/dhcp/dhcpd.conf` yang memuat deklarasi Network 4 tanpa pool dinamis dan deklarasi scope Network 2 & Network 3.*
+
+2. **Validasi Sintaks & Status Aktif Layanan ISC DHCP Server**:
+   ![Status Service dhcpd](Screenshot/soal-2/service-status.png)
+   *Uji sintaks `dhcpd -t -cf /etc/dhcp/dhcpd.conf` berhasil tanpa galat, layanan berstatus `dhcpd is running`, serta tidak ditemukan pesan galat "No subnet declaration" di sistem.*
 
 ---
 
