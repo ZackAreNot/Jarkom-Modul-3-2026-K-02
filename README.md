@@ -365,11 +365,25 @@
 
 1. **Konfigurasi Class, Subclass, dan Pool di Node `tengen`**:
    ![Konfigurasi Class dan Pool](Screenshot/soal-4/class-pool-conf.png)
-   *Menampilkan konfigurasi `/etc/dhcp/dhcpd.conf` yang memuat class `pool-dev` dan `pool-support` dengan MAC masing-masing node serta deklarasi kedua pool di subnet 192.212.2.0.*
+   *Menampilkan konfigurasi `/etc/dhcp/dhcpd.conf` yang memuat class `pool-dev` dan `pool-support` dengan deklarasi subclass MAC address masing-masing node, serta pembagian dua pool terpisah (`range 192.212.2.10 192.212.2.35` dan `range 192.212.2.70 192.212.2.95`).*
 
-2. **Perolehan Alokasi IP Klien Tim Dev & Support Divisi A**:
-   ![Alokasi IP Klien Divisi A](Screenshot/soal-4/alokasi-ip.png)
-   *Bukti `itadori` dan `fushiguro` berada di jatah Pool 1 (`.2.10` & `.2.11`), sedangkan `zenin` dan `okkotsu` berada di jatah Pool 2 (`.2.70` & `.2.71`).*
+2. **Perolehan Alokasi IP Klien Tim Dev (Pool 1: `192.212.2.10` – `192.212.2.35`)**:
+   - **Klien `itadori`**:
+     ![IP itadori](Screenshot/soal-4/ip-itadori.png)
+     *Klien `itadori` (MAC: `02:42:01:94:12:00`) berhasil memperoleh IP `192.212.2.10/24` yang berada di dalam rentang Pool 1.*
+
+   - **Klien `fushiguro`**:
+     ![IP fushiguro](Screenshot/soal-4/ip-fushiguro.png)
+     *Klien `fushiguro` (MAC: `02:42:2d:a4:7c:00`) berhasil memperoleh IP `192.212.2.11/24` yang berada di dalam rentang Pool 1.*
+
+3. **Perolehan Alokasi IP Klien Tim Support (Pool 2: `192.212.2.70` – `192.212.2.95`)**:
+   - **Klien `zenin`**:
+     ![IP zenin](Screenshot/soal-4/ip-zenin.png)
+     *Klien `zenin` (MAC: `02:42:03:14:51:00`) berhasil memperoleh IP `192.212.2.70/24` yang berada di dalam rentang Pool 2.*
+
+   - **Klien `okkotsu`**:
+     ![IP okkotsu](Screenshot/soal-4/ip-okkotsu.png)
+     *Klien `okkotsu` (MAC: `f2:dd:ec:51:c9:cb`) berhasil memperoleh IP `192.212.2.71/24` yang berada di dalam rentang Pool 2.*
 
 ---
 
