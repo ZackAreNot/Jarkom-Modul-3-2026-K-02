@@ -279,8 +279,13 @@
    *Menampilkan isi `/etc/default/isc-dhcp-relay` dengan server target `192.212.4.10` dan interface `eth2 eth3 eth4`, serta status proses `dhcrelay` yang berjalan aktif di router `jichi`.*
 
 2. **Perolehan Lease dan Konektivitas Klien Divisi A & Divisi B**:
-   ![Perolehan IP Klien Relay](Screenshot/soal-3/client-lease.png)
-   *Klien `itadori` (Network 2) dan `ino` (Network 3) berhasil memperoleh konfigurasi IP secara otomatis dari DHCP Server `tengen` melalui relay `jichi`, serta terverifikasi memiliki rute default dan konektivitas ping lancar ke gateway dan server.*
+   - **Klien `itadori` (Network 2 / Divisi A)**:
+     ![Perolehan IP Itadori](Screenshot/soal-3/client-itadori.png)
+     *Klien `itadori` berhasil memperoleh konfigurasi IP `192.212.2.10/24` dari DHCP Server `tengen` melalui relay `jichi`, dengan rute default ke `192.212.2.1`, serta uji ping ke gateway dan server berhasil dengan 0% packet loss.*
+
+   - **Klien `ino` (Network 3 / Divisi B)**:
+     ![Perolehan IP Ino](Screenshot/soal-3/client-ino.png)
+     *Klien `ino` berhasil memperoleh konfigurasi IP `192.212.3.10/24` dari DHCP Server `tengen` melalui relay `jichi`, dengan rute default ke `192.212.3.1`, serta uji ping ke gateway dan server berhasil dengan 0% packet loss.*
 
 ---
 
