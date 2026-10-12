@@ -32,17 +32,42 @@ default-lease-time 600;
 max-lease-time 7200;
 authoritative;
 
+# DHCP Classes untuk Divisi A (Network 2)
+class "pool-dev" {
+    match pick-first-value (option dhcp-client-identifier, hardware);
+}
+subclass "pool-dev" 1:02:42:01:94:12:00;  # itadori
+subclass "pool-dev" 1:02:42:2d:a4:7c:00;  # fushiguro
+
+class "pool-support" {
+    match pick-first-value (option dhcp-client-identifier, hardware);
+}
+subclass "pool-support" 1:02:42:03:14:51:00;  # zenin
+subclass "pool-support" 1:f2:dd:ec:51:c9:cb;  # okkotsu
+
 # Network 4: Data Center (Subnet lokal tengen tanpa pool dinamis)
-# Mencegah error "No subnet declaration for eth0"
 subnet 192.212.4.0 netmask 255.255.255.0 {
 }
 
-# Network 2: Divisi A Scope
+# Network 2: Divisi A Scope (Dua Pool Terpisah)
 subnet 192.212.2.0 netmask 255.255.255.0 {
-    range 192.212.2.10 192.212.2.35;
     option routers 192.212.2.1;
     option subnet-mask 255.255.255.0;
     option broadcast-address 192.212.2.255;
+
+    # Pool 1: Tim Dev (itadori, fushiguro)
+    pool {
+        allow members of "pool-dev";
+        deny members of "pool-support";
+        range 192.212.2.10 192.212.2.35;
+    }
+
+    # Pool 2: Tim Support (zenin, okkotsu)
+    pool {
+        allow members of "pool-support";
+        deny members of "pool-dev";
+        range 192.212.2.70 192.212.2.95;
+    }
 }
 
 # Network 3: Divisi B Scope

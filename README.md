@@ -296,14 +296,80 @@
 ### Soal
 > Agar tim Dev dan Support di Divisi A menerima jatah alamat yang berbeda, atur dua pool DHCP pada Network 2. Tetapkan Pool 1 ([PREFIX IP].2.10–[PREFIX IP].2.35) untuk itadori dan fushiguro, serta Pool 2 ([PREFIX IP].2.70–[PREFIX IP].2.95) untuk zenin dan okkotsu. Rentang [PREFIX IP].2.36–[PREFIX IP].2.69 tidak boleh dialokasikan. Karena seluruh client berada pada subnet yang sama, gunakan DHCP class berdasarkan MAC Address atau Client ID untuk memisahkan kedua kelompok.
 
-### Langkah Pengerjaan
-1. Definisi DHCP Class `pool-dev` dan `pool-support` berdasarkan hardware ethernet / client-identifier.
-2. Pembatasan akses pool menggunakan `allow members of` dan `deny members of`.
-3. Verifikasi alamat IP yang diperoleh masing-masing klien di Divisi A.
+### Langkah Pengerjaan dan Implementasi
+
+1. **Analisis Kebutuhan Alokasi & Identifikasi Host**:
+   - Seluruh klien berada di dalam subnet yang sama, yaitu Network 2 (`192.212.2.0/24`).
+   - Pembagian pool:
+     - **Pool 1 (Tim Dev)**: Rentang `192.212.2.10` – `192.212.2.35` untuk `itadori` dan `fushiguro`.
+     - **Pool 2 (Tim Support)**: Rentang `192.212.2.70` – `192.212.2.95` untuk `zenin` dan `okkotsu`.
+     - **Gap Non-Alokasi**: Rentang `192.212.2.36` – `192.212.2.69` sengaja tidak dideklarasikan pada pool mana pun agar tidak teralokasi secara dinamis.
+   - Identifikasi alamat MAC hardware interface `eth0` masing-masing host:
+     - `itadori`: `02:42:01:94:12:00`
+     - `fushiguro`: `02:42:2d:a4:7c:00`
+     - `zenin`: `02:42:03:14:51:00`
+     - `okkotsu`: `f2:dd:ec:51:c9:cb`
+
+2. **Konfigurasi DHCP Class & Subclass pada `tengen` (`/etc/dhcp/dhcpd.conf`)**:
+   - Pada ISC DHCP Server, klasifikasi klien berbasis MAC address / Client ID didefinisikan menggunakan direktif `class` yang memadankan nilai `match pick-first-value (option dhcp-client-identifier, hardware)` dipadukan dengan deklarasi `subclass`:
+     ```conf
+     # Definisi Class Tim Dev
+     class "pool-dev" {
+         match pick-first-value (option dhcp-client-identifier, hardware);
+     }
+     subclass "pool-dev" 1:02:42:01:94:12:00;  # itadori
+     subclass "pool-dev" 1:02:42:2d:a4:7c:00;  # fushiguro
+
+     # Definisi Class Tim Support
+     class "pool-support" {
+         match pick-first-value (option dhcp-client-identifier, hardware);
+     }
+     subclass "pool-support" 1:02:42:03:14:51:00;  # zenin
+     subclass "pool-support" 1:f2:dd:ec:51:c9:cb;  # okkotsu
+     ```
+
+3. **Deklarasi Pool Terpisah pada Scope Network 2**:
+   - Menggunakan klausa `pool { allow members of "..."; deny members of "..."; range ...; }`:
+     ```conf
+     subnet 192.212.2.0 netmask 255.255.255.0 {
+         option routers 192.212.2.1;
+         option subnet-mask 255.255.255.0;
+         option broadcast-address 192.212.2.255;
+
+         # Pool 1: Tim Dev (itadori, fushiguro)
+         pool {
+             allow members of "pool-dev";
+             deny members of "pool-support";
+             range 192.212.2.10 192.212.2.35;
+         }
+
+         # Pool 2: Tim Support (zenin, okkotsu)
+         pool {
+             allow members of "pool-support";
+             deny members of "pool-dev";
+             range 192.212.2.70 192.212.2.95;
+         }
+     }
+     ```
+
+4. **Validasi Sintaks & Uji Alokasi Klien**:
+   - Menjalankan `dhcpd -t -cf /etc/dhcp/dhcpd.conf` pada `tengen` $\rightarrow$ syntax valid tanpa galat.
+   - Meminta perbaruan lease DHCP pada keempat klien Divisi A:
+     - `itadori`: memperoleh IP **`192.212.2.10/24`** (masuk rentang Pool 1: `192.212.2.10` – `192.212.2.35`).
+     - `fushiguro`: memperoleh IP **`192.212.2.11/24`** (masuk rentang Pool 1: `192.212.2.10` – `192.212.2.35`).
+     - `zenin`: memperoleh IP **`192.212.2.70/24`** (masuk rentang Pool 2: `192.212.2.70` – `192.212.2.95`).
+     - `okkotsu`: memperoleh IP **`192.212.2.71/24`** (masuk rentang Pool 2: `192.212.2.70` – `192.212.2.95`).
+   - Rentang gap `192.212.2.36` s.d. `192.212.2.69` terbukti tidak pernah dialokasikan ke host mana pun.
 
 ### Bukti dan Hasil
-- *Screenshot konfigurasi class & pool*: `Screenshot/soal-4/class-pool-conf.png`
-- *Screenshot alokasi IP itadori & zenin*: `Screenshot/soal-4/alokasi-ip.png`
+
+1. **Konfigurasi Class, Subclass, dan Pool di Node `tengen`**:
+   ![Konfigurasi Class dan Pool](Screenshot/soal-4/class-pool-conf.png)
+   *Menampilkan konfigurasi `/etc/dhcp/dhcpd.conf` yang memuat class `pool-dev` dan `pool-support` dengan MAC masing-masing node serta deklarasi kedua pool di subnet 192.212.2.0.*
+
+2. **Perolehan Alokasi IP Klien Tim Dev & Support Divisi A**:
+   ![Alokasi IP Klien Divisi A](Screenshot/soal-4/alokasi-ip.png)
+   *Bukti `itadori` dan `fushiguro` berada di jatah Pool 1 (`.2.10` & `.2.11`), sedangkan `zenin` dan `okkotsu` berada di jatah Pool 2 (`.2.70` & `.2.71`).*
 
 ---
 
