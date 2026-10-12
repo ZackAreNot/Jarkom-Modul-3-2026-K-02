@@ -134,8 +134,13 @@
    *Antarmuka `eth0` memperoleh IP WAN via NAT DHCP (`192.168.122.x`), sedangkan `eth1` s.d. `eth4` aktif sebagai gateway ke 4 subnet LAN (`192.212.1.1` s.d. `192.212.4.1`). Tabel routing kernel mencakup seluruh subnet internal dan default route ke internet.*
 
 3. **Uji Konektivitas Host ke Default Gateway & Akses Internet (WAN NAT)**:
-   ![Uji Ping Gateway dan WAN](Screenshot/soal-1/ping-gateway-wan.png)
-   *Pengujian ping dari host infrastruktur (misalnya `utahime` dan `tengen`) menuju default gateway masing-masing dan menuju domain internet (`google.com`) berhasil dengan 0% packet loss.*
+   - **Host `utahime` (Network 1 / DMZ)**:
+     ![Uji Ping Utahime](Screenshot/soal-1/ping-utahime.png)
+     *Node `utahime` berhasil melakukan ping ke default gateway `192.212.1.1` dan ping ke domain publik `google.com` dengan 0% packet loss.*
+
+   - **Host `tengen` (Network 4 / Data Center)**:
+     ![Uji Ping Tengen](Screenshot/soal-1/ping-tengen.png)
+     *Node `tengen` berhasil melakukan ping ke default gateway `192.212.4.1` dan ping ke domain publik `google.com` dengan 0% packet loss.*
 
 ---
 
