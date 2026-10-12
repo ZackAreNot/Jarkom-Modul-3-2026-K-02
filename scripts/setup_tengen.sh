@@ -110,6 +110,14 @@ subnet 192.212.3.0 netmask 255.255.255.0 {
         range 192.212.3.100 192.212.3.199;
     }
 }
+
+# Soal 6: Reservasi Fixed Address VIP Kugisaki
+# Berada di luar seluruh pool dinamis (192.212.3.10-89 & 192.212.3.100-199)
+host kugisaki {
+    hardware ethernet 02:42:88:94:88:00;
+    fixed-address 192.212.3.99;
+    option routers 192.212.3.1;
+}
 EOF
 
 # 5. Pastikan direktori dan berkas lease tersedia

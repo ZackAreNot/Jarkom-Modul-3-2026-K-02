@@ -495,14 +495,52 @@
 ### Soal
 > Kugisaki ditetapkan sebagai personel VIP yang harus mempertahankan alamat yang sama setiap kali terhubung. Buat DHCP static lease berdasarkan MAC Address client tersebut dengan fixed address [PREFIX IP].3.99. Pastikan alamat ini berada di luar seluruh pool dinamis, validasi konfigurasi server, lalu renew lease pada client. Buktikan bahwa alamat yang diterima sesuai dengan reservasi.
 
-### Langkah Pengerjaan
-1. Pengambilan MAC Address interface `eth0` pada node `kugisaki`.
-2. Pendeklarasian blok `host kugisaki` dengan parameter `hardware ethernet` dan `fixed-address 192.212.3.99`.
-3. Renew IP pada `kugisaki` dan verifikasi alamat yang didapat.
+### Langkah Pengerjaan dan Implementasi
+
+1. **Analisis Kebutuhan Fixed Address VIP**:
+   - Host VIP: **`kugisaki`** berada di Network 3 (Divisi B: `192.212.3.0/24`).
+   - Alamat MAC fisik interface `eth0`: `02:42:88:94:88:00`.
+   - Alamat IP yang dipesan (*static reservation*): **`192.212.3.99`**.
+   - **Verifikasi Posisi Alamat Terhadap Pool Dinamis**:
+     - Short Lease Pool: `192.212.3.10` – `192.212.3.89`.
+     - Long Lease Pool: `192.212.3.100` – `192.212.3.199`.
+     - Alamat `192.212.3.99` berada tepat di celah (*gap*) antara kedua pool dinamis, sehingga dipastikan tidak akan pernah teralokasikan kepada klien DHCP dinamis lain.
+
+2. **Konfigurasi Reservasi Statis pada `tengen` (`/etc/dhcp/dhcpd.conf`)**:
+   - Menambahkan blok deklarasi `host kugisaki` pada berkas konfigurasi DHCP:
+     ```conf
+     host kugisaki {
+         hardware ethernet 02:42:88:94:88:00;
+         fixed-address 192.212.3.99;
+         option routers 192.212.3.1;
+     }
+     ```
+   - Parameter `fixed-address` memastikan daemon DHCP Server selalu mencocokkan MAC Address `02:42:88:94:88:00` dan mengembalikan alamat IP tetap `192.212.3.99`.
+
+3. **Validasi Sintaks & Pengujian Renew Lease pada Klien `kugisaki`**:
+   - Menjalankan `dhcpd -t -cf /etc/dhcp/dhcpd.conf` pada `tengen` $\rightarrow$ sintaks valid tanpa error.
+   - Restart service `isc-dhcp-server`.
+   - Pada konsol `kugisaki`, jalankan pembaruan lease:
+     ```bash
+     pkill udhcpc
+     ip addr flush dev eth0
+     udhcpc -i eth0 -n -q
+     ```
+   - Output `udhcpc` menunjukkan perolehan IP tetap:
+     `udhcpc: lease of 192.212.3.99 obtained from 192.212.4.10`
+   - Verifikasi antarmuka: `ip -br addr show eth0` menghasilkan `192.212.3.99/24`.
+   - Verifikasi rute: default gateway mengarah ke `192.212.3.1`.
+   - Verifikasi konektivitas: ping ke gateway `192.212.3.1` dan server `192.212.4.10` berhasil 100% (0% packet loss).
 
 ### Bukti dan Hasil
-- *Screenshot deklarasi host kugisaki*: `Screenshot/soal-6/fixed-address-conf.png`
-- *Screenshot renew IP kugisaki*: `Screenshot/soal-6/kugisaki-renew.png`
+
+1. **Konfigurasi Deklarasi Static Host di Server `tengen`**:
+   ![Konfigurasi Fixed Address](Screenshot/soal-6/fixed-address-conf.png)
+   *Menampilkan blok deklarasi `host kugisaki` dengan MAC address `02:42:88:94:88:00` dan `fixed-address 192.212.3.99` yang berada di luar seluruh rentang pool dinamis.*
+
+2. **Pembaruan Lease dan Alokasi IP Statis pada Node `kugisaki`**:
+   ![Renew IP kugisaki](Screenshot/soal-6/kugisaki-renew.png)
+   *Proses renew lease melalui `udhcpc` membuktikan node `kugisaki` berhasil mendapatkan IP tetap `192.212.3.99/24`, memiliki default route dan resolv.conf yang benar, serta konektivitas ping lancar ke gateway dan server.*
 
 ---
 
