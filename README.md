@@ -61,15 +61,81 @@
 ### Soal
 > Ketika Curtain menutup Shibuya, jalur komunikasi antar zona Jujutsu High terputus. Pulihkan konektivitas dasar dengan mengonfigurasi jichi: eth0 memperoleh WAN dari NAT, sedangkan eth1–eth4 menjadi gateway Network 1–4 sesuai tabel pemetaan. Aktifkan IPv4 forwarding dan source NAT, lalu tetapkan IP statis host infrastruktur sesuai tabel spesifikasi. Buktikan konektivitas setiap host ke gateway dan akses eksternal dari host yang relevan.
 
-### Langkah Pengerjaan
-1. Konfigurasi interface router `jichi` dan iptables source NAT masquerade.
-2. Konfigurasi alamat IP statis untuk host infrastruktur.
-3. Pengujian konektivitas dasar menuju gateway dan akses internet.
+### Langkah Pengerjaan dan Implementasi
+
+1. **Pembangunan Topologi & Wiring GNS3**:
+   - Router **`jichi`** (`debinet`) dilengkapi dengan 5 adapter jaringan:
+     - `eth0` $\rightarrow$ NAT (`NAT1`) untuk koneksi WAN / Internet.
+     - `eth1` $\rightarrow$ `Switch1` (Gateway Network 1 / DMZ: `192.212.1.1/24`).
+     - `eth2` $\rightarrow$ `Switch2` (Gateway Network 2 / Divisi A: `192.212.2.1/24`).
+     - `eth3` $\rightarrow$ `Switch4` (Gateway Network 3 / Divisi B: `192.212.3.1/24`).
+     - `eth4` $\rightarrow$ `Switch6` (Gateway Network 4 / Data Center: `192.212.4.1/24`).
+   - Node infrastruktur dihubungkan ke segmen switch masing-masing:
+     - Network 1 (Switch1): `utahime` (`eth0`), `shoko` (`eth0`), `gojo` (`eth0`).
+     - Network 4 (Switch6): `Switch10` $\rightarrow$ `tengen` (`eth0`), `yaga` (`eth0`), `inumaki` (`eth0`); `Switch7` $\rightarrow$ `geto`, `maki`, `panda`, `nanami`, `todo`, `kirara` (`eth0`).
+
+2. **Konfigurasi Interface & Routing pada Router `jichi`**:
+   - Berkas `/etc/network/interfaces` pada `jichi`:
+     ```bash
+     auto eth0
+     iface eth0 inet dhcp
+         post-up iptables -t nat -C POSTROUTING -o eth0 -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+         post-up sysctl -w net.ipv4.ip_forward=1
+
+     auto eth1
+     iface eth1 inet static
+         address 192.212.1.1
+         netmask 255.255.255.0
+
+     auto eth2
+     iface eth2 inet static
+         address 192.212.2.1
+         netmask 255.255.255.0
+
+     auto eth3
+     iface eth3 inet static
+         address 192.212.3.1
+         netmask 255.255.255.0
+
+     auto eth4
+     iface eth4 inet static
+         address 192.212.4.1
+         netmask 255.255.255.0
+     ```
+   - Mengaktifkan IP forwarding dan NAT masquerade:
+     ```bash
+     sysctl -w net.ipv4.ip_forward=1
+     iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+     ```
+
+3. **Konfigurasi Alamat IP Statis Host Infrastruktur**:
+   - Seluruh host infrastruktur di Network 1 dan Network 4 dikonfigurasi menggunakan `/root/init.sh` dengan default gateway mengarah ke antarmuka `jichi` yang bersangkutan dan nameserver awal `192.168.122.1`:
+     - **`utahime`**: `192.212.1.2/24`, Gateway: `192.212.1.1`
+     - **`shoko`**: `192.212.1.3/24`, Gateway: `192.212.1.1`
+     - **`gojo`**: `192.212.1.4/24`, Gateway: `192.212.1.1`
+     - **`tengen`**: `192.212.4.10/24`, Gateway: `192.212.4.1`
+     - **`geto`**: `192.212.4.2/24`, Gateway: `192.212.4.1`
+     - **`maki`**: `192.212.4.3/24`, Gateway: `192.212.4.1`
+     - **`panda`**: `192.212.4.4/24`, Gateway: `192.212.4.1`
+     - **`nanami`**: `192.212.4.5/24`, Gateway: `192.212.4.1`
+     - **`todo`**: `192.212.4.6/24`, Gateway: `192.212.4.1`
+     - **`kirara`**: `192.212.4.7/24`, Gateway: `192.212.4.1`
+     - **`yaga`**: `192.212.4.8/24`, Gateway: `192.212.4.1`
+     - **`inumaki`**: `192.212.4.9/24`, Gateway: `192.212.4.1`
 
 ### Bukti dan Hasil
-- *Screenshot topologi GNS3*: `Screenshot/soal-1/topologi.png`
-- *Screenshot ip route jichi*: `Screenshot/soal-1/ip-jichi.png`
-- *Screenshot ping gateway*: `Screenshot/soal-1/ping-gateway.png`
+
+1. **Topologi Jaringan Lengkap di GNS3**:
+   ![Topologi Modul 3](Screenshot/soal-1/topologi.png)
+   *Topologi Jujutsu High (Shibuya Incident) dirancang sesuai skema soal pada project K-02-MODUL-3 di server GNS3.*
+
+2. **Verifikasi Alamat IP & Tabel Routing Router `jichi`**:
+   ![IP dan Routing jichi](Screenshot/soal-1/ip-route-jichi.png)
+   *Antarmuka `eth0` memperoleh IP WAN via NAT DHCP (`192.168.122.x`), sedangkan `eth1` s.d. `eth4` aktif sebagai gateway ke 4 subnet LAN (`192.212.1.1` s.d. `192.212.4.1`). Tabel routing kernel mencakup seluruh subnet internal dan default route ke internet.*
+
+3. **Uji Konektivitas Host ke Default Gateway & Akses Internet (WAN NAT)**:
+   ![Uji Ping Gateway dan WAN](Screenshot/soal-1/ping-gateway-wan.png)
+   *Pengujian ping dari host infrastruktur (misalnya `utahime` dan `tengen`) menuju default gateway masing-masing dan menuju domain internet (`google.com`) berhasil dengan 0% packet loss.*
 
 ---
 
