@@ -716,8 +716,16 @@
      - Pengujian `ping` menuju gateway `192.212.2.1` dan DHCP Server `192.212.4.10` kembali berhasil **0% packet loss**.
 
 ### Bukti dan Hasil
-- *Screenshot kegagalan saat relay down*: `Screenshot/soal-9/relay-failure.png`
-- *Screenshot pemulihan saat relay aktif*: `Screenshot/soal-9/relay-recovered.png`
+
+1. **Penghentian Service DHCP Relay di `jichi` & Gejala Kegagalan Lease pada `itadori`**:
+   ![Penghentian Relay di jichi](Screenshot/soal-9/jichi-relay-stop.png)
+   ![Kegagalan Lease saat Relay Down](Screenshot/soal-9/relay-failure.png)
+   *Saat `isc-dhcp-relay` dihentikan pada `jichi`, permintaan `udhcpc` pada `itadori` hanya mengirimkan `broadcasting discover` berulang kali hingga gagal (`udhcpc failed to get a DHCP lease`), kehilangan alamat IPv4 serta default route, dan ping gagal dengan `Network unreachable`.*
+
+2. **Pemulihan Service DHCP Relay di `jichi` & Kembalinya Alokasi IP dan Gateway pada `itadori`**:
+   ![Pemulihan Relay di jichi](Screenshot/soal-9/jichi-relay-start.png)
+   ![Pemulihan Lease saat Relay Aktif](Screenshot/soal-9/relay-recovered.png)
+   *Setelah `isc-dhcp-relay` diaktifkan kembali pada `jichi`, klien `itadori` berhasil memperoleh kembali IP `192.212.2.10/24` dari Pool 1 beserta default gateway semula (`192.212.2.1`) dan konektivitas ping ke gateway maupun server `tengen` (`192.212.4.10`) pulih 0% packet loss.*
 
 ---
 
