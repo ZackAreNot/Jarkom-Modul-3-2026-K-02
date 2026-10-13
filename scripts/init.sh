@@ -349,8 +349,8 @@ auto eth0
 iface eth0 inet dhcp
 EOF
         ip link set eth0 up 2>/dev/null || true
-        # Request lease jika dhcp server sudah ada
-        udhcpc -i eth0 -n -q 2>/dev/null || true
+        # Request lease lengkap dengan opsi broadcast & domain-search
+        udhcpc -i eth0 -O broadcast -O search -n -q 2>/dev/null || true
         echo "[OK] $NODE_LOWER siap!"
         ;;
 

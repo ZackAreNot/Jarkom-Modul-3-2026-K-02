@@ -551,14 +551,53 @@
 ### Soal
 > Setelah aturan alokasi diterapkan, pastikan setiap client menerima konfigurasi jaringan sesuai wilayahnya: subnet mask 255.255.255.0 (/24), gateway dan broadcast address yang benar, DNS [PREFIX IP].1.2 serta [PREFIX IP].1.3, dan domain-search yang ditentukan. Periksa IP address dan routing seluruh client Divisi A dan Divisi B, kemudian cocokkan lease dengan /var/lib/dhcp/dhcpd.leases pada tengen. Pastikan tidak ada alamat yang bertabrakan atau berada di luar kebijakan pool.
 
-### Langkah Pengerjaan
-1. Audit konfigurasi IP, subnet mask, default gateway, dan resolv.conf di seluruh client.
-2. Analisis berkas database sewa `/var/lib/dhcp/dhcpd.leases` pada `tengen`.
-3. Pengecekan konsistensi alamat terhadap rentang pool yang ditentukan.
+### Langkah Pengerjaan dan Implementasi
+
+1. **Penyeragaman Opsi DHCP Global & Per-Subnet (`/etc/dhcp/dhcpd.conf`)**:
+   - Memastikan seluruh subnet klien (Network 2 dan Network 3) mengirimkan opsi lengkap kepada klien:
+     - `option subnet-mask 255.255.255.0;` (`/24`)
+     - `option broadcast-address 192.212.2.255;` (Network 2) & `192.212.3.255` (Network 3)
+     - `option routers 192.212.2.1;` (Network 2) & `192.212.3.1` (Network 3)
+     - `option domain-name-servers 192.212.1.2, 192.212.1.3;` (`utahime` & `shoko`)
+     - `option domain-search "k02.com";`
+   - Pada sisi klien (`udhcpc`), parameter `-O broadcast -O search` disertakan saat meminta lease:
+     ```bash
+     udhcpc -i eth0 -O broadcast -O search -n -q
+     ```
+     sehingga antarmuka `eth0` menampilkan broadcast address secara eksplisit (`brd 192.212.x.255`) dan `/etc/resolv.conf` memuat `search k02.com` beserta kedua DNS server.
+
+2. **Prosedur Audit Seluruh Klien Divisi A & Divisi B**:
+   - Pada setiap node klien, dilakukan pemeriksaan satu baris perintah terpadu:
+     ```bash
+     ip -4 addr show eth0 | grep inet; ip route; cat /etc/resolv.conf
+     ```
+   - Hasil rekapitulasi audit seluruh 8 klien:
+
+| Node | Divisi / Subnet | MAC Address | IP & Prefix | Broadcast | Default Gateway | DNS Servers | Domain Search | Kebijakan Pool & Durasi | Status Lease `tengen` |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **`itadori`** | Divisi A (Net 2) | `02:42:01:94:12:00` | `192.212.2.10/24` | `192.212.2.255` | `192.212.2.1` | `192.212.1.2`, `192.212.1.3` | `k02.com` | Pool 1 Dev (`.2.10–.2.35`) | Aktif (`dhcpd.leases`) |
+| **`fushiguro`** | Divisi A (Net 2) | `02:42:2d:a4:7c:00` | `192.212.2.11/24` | `192.212.2.255` | `192.212.2.1` | `192.212.1.2`, `192.212.1.3` | `k02.com` | Pool 1 Dev (`.2.10–.2.35`) | Aktif (`dhcpd.leases`) |
+| **`zenin`** | Divisi A (Net 2) | `02:42:03:14:51:00` | `192.212.2.70/24` | `192.212.2.255` | `192.212.2.1` | `192.212.1.2`, `192.212.1.3` | `k02.com` | Pool 2 Support (`.2.70–.2.95`) | Aktif (`dhcpd.leases`) |
+| **`okkotsu`** | Divisi A (Net 2) | `02:42:27:c7:c1:00` | `192.212.2.71/24` | `192.212.2.255` | `192.212.2.1` | `192.212.1.2`, `192.212.1.3` | `k02.com` | Pool 2 Support (`.2.70–.2.95`) | Aktif (`dhcpd.leases`) |
+| **`ino`** | Divisi B (Net 3) | `02:42:c1:1e:00:00` | `192.212.3.10/24` | `192.212.3.255` | `192.212.3.1` | `192.212.1.2`, `192.212.1.3` | `k02.com` | Short Lease (`.3.10–.3.89`, 1800s) | Aktif (`dhcpd.leases`) |
+| **`kusakabe`** | Divisi B (Net 3) | `02:42:23:9f:ee:00` | `192.212.3.11/24` | `192.212.3.255` | `192.212.3.1` | `192.212.1.2`, `192.212.1.3` | `k02.com` | Short Lease (`.3.10–.3.89`, 1800s) | Aktif (`dhcpd.leases`) |
+| **`kugisaki`** | Divisi B (Net 3) | `02:42:88:94:88:00` | `192.212.3.99/24` | `192.212.3.255` | `192.212.3.1` | `192.212.1.2`, `192.212.1.3` | `k02.com` | Static VIP Reservation (`.3.99`) | Statis (`dhcpd.conf`) |
+| **`miwa`** | Divisi B (Net 3) | `02:42:1f:2a:46:00` | `192.212.3.100/24` | `192.212.3.255` | `192.212.3.1` | `192.212.1.2`, `192.212.1.3` | `k02.com` | Long Lease (`.3.100–.3.199`, 43200s) | Aktif (`dhcpd.leases`) |
+
+3. **Pencocokan dengan Database `/var/lib/dhcp/dhcpd.leases` pada `tengen`**:
+   - Seluruh 7 klien dinamis (`192.212.2.10`, `192.212.2.11`, `192.212.2.70`, `192.212.2.71`, `192.212.3.10`, `192.212.3.11`, `192.212.3.100`) tercatat dengan status `binding state active;` beserta alamat `hardware ethernet` yang cocok persis dengan antarmuka masing-masing klien.
+   - Klien VIP `kugisaki` (`192.212.3.99`) dialokasikan secara deterministik melalui blok `host kugisaki` (`fixed-address`), sehingga tidak memakan kuota pool dinamis dan tidak tercatat sebagai sewa dinamis di `dhcpd.leases`.
+   - Tidak ditemukan satupun alamat yang bertabrakan (*IP conflict*) maupun melanggar batasan rentang pool.
 
 ### Bukti dan Hasil
-- *Screenshot audit klien Network 2 & 3*: `Screenshot/soal-7/audit-klien.png`
-- *Screenshot dhcpd.leases*: `Screenshot/soal-7/dhcpd-leases.png`
+
+1. **Audit Konfigurasi Jaringan Klien Divisi A & Divisi B**:
+   ![Audit Klien](Screenshot/soal-7/audit-klien.png)
+   *Menampilkan verifikasi IP (/24), broadcast address, default route, DNS (`192.212.1.2` & `192.212.1.3`), serta domain-search (`k02.com`) pada klien Network 2 dan Network 3.*
+
+2. **Kecocokan Database `/var/lib/dhcp/dhcpd.leases` pada Node `tengen`**:
+   ![Database dhcpd.leases](Screenshot/soal-7/dhcpd-leases.png)
+   *Isi `/var/lib/dhcp/dhcpd.leases` di `tengen` memuat ketujuh lease aktif yang konsisten dengan MAC address, kebijakan pool, dan durasi sewa masing-masing klien.*
 
 ---
 

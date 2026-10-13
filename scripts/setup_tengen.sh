@@ -32,6 +32,11 @@ default-lease-time 600;
 max-lease-time 7200;
 authoritative;
 
+# Global DHCP Options (DNS & Domain Search)
+option domain-name-servers 192.212.1.2, 192.212.1.3;
+option domain-search "k02.com";
+option domain-name "k02.com";
+
 # DHCP Classes untuk Divisi A (Network 2)
 class "pool-dev" {
     match pick-first-value (option dhcp-client-identifier, hardware);
@@ -43,15 +48,16 @@ class "pool-support" {
     match pick-first-value (option dhcp-client-identifier, hardware);
 }
 subclass "pool-support" 1:02:42:03:14:51:00;  # zenin
-subclass "pool-support" 1:f2:dd:ec:51:c9:cb;  # okkotsu
+subclass "pool-support" 1:02:42:27:c7:c1:00;  # okkotsu
+subclass "pool-support" 1:f2:dd:ec:51:c9:cb;  # okkotsu (alt)
 
 # DHCP Classes untuk Divisi B (Network 3)
 class "pool-short" {
     match pick-first-value (option dhcp-client-identifier, hardware);
 }
 subclass "pool-short" 1:02:42:c1:1e:00:00;  # ino
-subclass "pool-short" 1:f2:dd:ec:51:c9:cb;  # kusakabe (default MAC)
-subclass "pool-short" 1:02:42:03:14:53:00;  # kusakabe (alt MAC)
+subclass "pool-short" 1:02:42:23:9f:ee:00;  # kusakabe
+subclass "pool-short" 1:02:42:03:14:53:00;  # kusakabe (alt)
 
 class "pool-long" {
     match pick-first-value (option dhcp-client-identifier, hardware);
@@ -67,6 +73,9 @@ subnet 192.212.2.0 netmask 255.255.255.0 {
     option routers 192.212.2.1;
     option subnet-mask 255.255.255.0;
     option broadcast-address 192.212.2.255;
+    option domain-name-servers 192.212.1.2, 192.212.1.3;
+    option domain-search "k02.com";
+    option domain-name "k02.com";
 
     # Pool 1: Tim Dev (itadori, fushiguro)
     pool {
@@ -117,6 +126,10 @@ host kugisaki {
     hardware ethernet 02:42:88:94:88:00;
     fixed-address 192.212.3.99;
     option routers 192.212.3.1;
+    option subnet-mask 255.255.255.0;
+    option broadcast-address 192.212.3.255;
+    option domain-name-servers 192.212.1.2, 192.212.1.3;
+    option domain-search "k02.com";
 }
 EOF
 
