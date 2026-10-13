@@ -346,10 +346,24 @@ EOF
     # ── Client Nodes (Network 2 & 3 - Alpinet) ────────────────────────────────
     *itadori*|*fushiguro*|*zenin*|*okkotsu*|*ino*|*kusakabe*|*kugisaki*|*miwa*)
         echo "=== [$NODE_LOWER] Mengonfigurasi DHCP Client ==="
-        cat << 'EOF' > /etc/network/interfaces
+        case "$NODE_LOWER" in
+            *itadori*)   CLIENT_MAC="02:42:01:94:12:00" ;;
+            *fushiguro*) CLIENT_MAC="02:42:2d:a4:7c:00" ;;
+            *zenin*)     CLIENT_MAC="02:42:03:14:51:00" ;;
+            *okkotsu*)   CLIENT_MAC="02:42:27:c7:c1:00" ;;
+            *ino*)       CLIENT_MAC="02:42:c1:1e:00:00" ;;
+            *kusakabe*)  CLIENT_MAC="02:42:23:9f:ee:00" ;;
+            *kugisaki*)  CLIENT_MAC="02:42:88:94:88:00" ;;
+            *miwa*)      CLIENT_MAC="02:42:1f:2a:46:00" ;;
+        esac
+        cat << EOF > /etc/network/interfaces
 auto eth0
 iface eth0 inet dhcp
+    pre-up ip link set dev eth0 address $CLIENT_MAC
+    udhcpc_opts -O broadcast -O search
+    post-up udhcpc -i eth0 -O broadcast -O search -n -q >/dev/null 2>&1 || true
 EOF
+        ip link set dev eth0 address "$CLIENT_MAC" 2>/dev/null || true
         ip link set eth0 up 2>/dev/null || true
         # Request lease lengkap dengan opsi broadcast & domain-search
         udhcpc -i eth0 -O broadcast -O search -n -q 2>/dev/null || true
