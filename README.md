@@ -596,7 +596,8 @@
    *Menampilkan verifikasi IP (/24), broadcast address, default route, DNS (`192.212.1.2` & `192.212.1.3`), serta domain-search (`k02.com`) pada klien Network 2 dan Network 3.*
 
 2. **Kecocokan Database `/var/lib/dhcp/dhcpd.leases` pada Node `tengen`**:
-   ![Database dhcpd.leases](Screenshot/soal-7/dhcpd-leases.png)
+   ![Database dhcpd.leases Bagian 1](Screenshot/soal-7/dhcpd-leases.png)
+   ![Database dhcpd.leases Bagian 2](Screenshot/soal-7/dhcpd-leases-2.png)
    *Isi `/var/lib/dhcp/dhcpd.leases` di `tengen` memuat ketujuh lease aktif yang konsisten dengan MAC address, kebijakan pool, dan durasi sewa masing-masing klien.*
 
 ---
@@ -608,10 +609,42 @@
 ### Soal
 > Sebelum Curtain dibuka kembali, buktikan bahwa proses pemberian alamat berjalan sesuai protokol. Lakukan packet capture saat salah satu client Network 2 atau Network 3 meminta lease baru. Gunakan tcpdump pada tengen atau jalur menuju Data Center untuk menunjukkan urutan DHCPDISCOVER → DHCPOFFER → DHCPREQUEST → DHCPACK. Identifikasi alamat server, alamat yang diberikan, lease time, dan field giaddr. Pastikan nilai giaddr sesuai dengan interface jichi yang menerima request dari subnet client.
 
-### Langkah Pengerjaan
-1. Menjalankan `tcpdump -i any -n port 67 or port 68` pada `tengen` / `jichi`.
-2. Meminta perpanjangan lease baru pada client (`udhcpc -R -i eth0`).
-3. Analisis 4 paket DORA dan pemeriksaan field `giaddr`.
+### Langkah Pengerjaan dan Analisis Protokol DORA
+
+1. **Penangkapan Paket DHCP pada Node `tengen` (`eth0`)**:
+   - Memasang utilitas `tcpdump` pada server `tengen` (`192.212.4.10`) dan menjalankan perekaman 4 paket transaksi DHCP (port UDP `67` dan `68`) ke dalam berkas `/root/dora.pcap`:
+     ```bash
+     tcpdump -i eth0 -n port 67 or port 68 -c 4 -w /root/dora.pcap
+     ```
+   - Pada klien `ino` (Divisi B / Network 3, MAC `02:42:c1:1e:00:00`), melepaskan sewa lama dan memicu permintaan lease baru:
+     ```bash
+     pkill -USR2 udhcpc
+     ip -4 addr flush dev eth0
+     udhcpc -i eth0 -O broadcast -O search -n -q
+     ```
+
+2. **Verifikasi Urutan 4 Paket DORA (`tcpdump -r /root/dora.pcap -n`)**:
+   ```text
+   03:50:51.083920 IP 192.212.4.1.67 > 192.212.4.10.67: BOOTP/DHCP, Request from 02:42:c1:1e:00:00, length 300
+   03:50:52.085453 IP 192.212.4.10.67 > 192.212.3.1.67: BOOTP/DHCP, Reply, length 304
+   03:50:52.094817 IP 192.212.4.1.67 > 192.212.4.10.67: BOOTP/DHCP, Request from 02:42:c1:1e:00:00, length 300
+   03:50:52.096140 IP 192.212.4.10.67 > 192.212.3.1.67: BOOTP/DHCP, Reply, length 304
+   ```
+   - Terlihat 4 paket berurutan dengan Transaction ID yang sama (`xid 0x64a8b728`, `hops 1`) yang dipertukarkan secara unicast antara DHCP Relay `jichi` (`192.212.4.1` / `192.212.3.1`) dan DHCP Server `tengen` (`192.212.4.10`).
+
+3. **Identifikasi Parameter Protokol & Field `giaddr` (`tcpdump -r /root/dora.pcap -n -v`)**:
+
+| Tahap DORA | Option 53 (`DHCP-Message`) | Arah Paket IP (Layer 3) | Field `Gateway-IP` (`giaddr`) | Field `Your-IP` (`yiaddr`) | Option 54 (`Server-ID`) | Option 51 (`Lease-Time`) | Keterangan Teknis |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **1. Discover** | `Discover` | `192.212.4.1:67` $\rightarrow$ `192.212.4.10:67` | **`192.212.3.1`** | `0.0.0.0` | - | - | Broadcast klien `ino` diterima `jichi` di `eth3` (`192.212.3.1`), diisi `giaddr = 192.212.3.1`, lalu diteruskan ke `tengen`. |
+| **2. Offer** | `Offer` | `192.212.4.10:67` $\rightarrow$ `192.212.3.1:67` | **`192.212.3.1`** | **`192.212.3.10`** | **`192.212.4.10`** | **`1800` detik** | `tengen` membaca `giaddr = 192.212.3.1`, mencocokkan dengan subnet Network 3 (`pool-short`), dan menawarkan IP `192.212.3.10`. |
+| **3. Request** | `Request` | `192.212.4.1.67` $\rightarrow$ `192.212.4.10:67` | **`192.212.3.1`** | `0.0.0.0` (Option 50: `192.212.3.10`) | **`192.212.4.10`** | - | Klien meminta konfirmasi atas IP `192.212.3.10` (`Requested-IP`); relay kembali meneruskan dengan `giaddr = 192.212.3.1`. |
+| **4. ACK** | `ACK` | `192.212.4.10:67` $\rightarrow$ `192.212.3.1:67` | **`192.212.3.1`** | **`192.212.3.10`** | **`192.212.4.10`** | **`1800` detik** | `tengen` mengesahkan sewa IP `192.212.3.10` selama `1800s` beserta opsi mask `/24`, gateway `.3.1`, broadcast `.3.255`, DNS `.1.2`/`.1.3`, dan domain `k02.com`. |
+
+   - **Alamat Server (`Server-ID` / Option 54)**: `192.212.4.10` (`tengen`).
+   - **Alamat yang Diberikan (`Your-IP` / `yiaddr`)**: `192.212.3.10` (untuk klien `ino` dengan MAC `02:42:c1:1e:00:00`).
+   - **Lease Time (Option 51)**: `1800` detik (30 menit, sesuai kebijakan *short lease* pada `pool-short`).
+   - **Field `giaddr` (`Gateway-IP`)**: `192.212.3.1` — terbukti sesuai dengan alamat IP interface `eth3` pada router/relay `jichi` yang menghadap langsung ke subnet klien Network 3 (`192.212.3.0/24`).
 
 ### Bukti dan Hasil
 - *Screenshot DORA capture*: `Screenshot/soal-8/dora-packets.png`
