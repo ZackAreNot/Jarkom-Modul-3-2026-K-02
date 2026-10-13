@@ -784,8 +784,20 @@
 | **`miwa`** | Network 3 | **Long Lease** (`.3.100–.3.199`, `43200s`) | `192.212.3.100/24` | `192.212.3.1` | `binding state active` | Berhasil (`0% loss`, `1.01 ms`) |
 
 ### Bukti dan Hasil
-- *Screenshot status autostart setelah restart*: `Screenshot/soal-10/autostart-status.png`
-- *Screenshot verifikasi konektivitas client*: `Screenshot/soal-10/reboot-verify.png`
+
+1. **Verifikasi Status *Autostart* DHCP Relay di `jichi` & DHCP Server di `tengen` Pasca-Restart**:
+   ![Status Autostart jichi](Screenshot/soal-10/autostart-jichi.png)
+   ![Status Autostart tengen](Screenshot/soal-10/autostart-status.png)
+   *Menampilkan bukti bahwa setelah kedua node di-restart, seluruh interface IP gateway, default route, symlink `/etc/rc2.d/S01isc-dhcp-*`, serta proses daemon `dhcrelay` (di `jichi`) dan `dhcpd` (di `tengen`) otomatis berjalan aktif.*
+
+2. **Verifikasi Persistensi Database Lease (`/var/lib/dhcp/dhcpd.leases`) & Kebijakan Pool di `tengen`**:
+   ![Database Lease Pasca-Restart Bagian 1](Screenshot/soal-10/reboot-leases-1.png)
+   ![Database Lease Pasca-Restart Bagian 2](Screenshot/soal-10/reboot-leases-2.png)
+   *Menampilkan status `binding state active` untuk seluruh klien Network 2 (Pool 1 & Pool 2) dan Network 3 (Short Lease & Long Lease) yang tetap terjaga setelah restart.*
+
+3. **Verifikasi IP, Gateway, dan Konektivitas Klien Pasca-Restart**:
+   ![Verifikasi Klien Pasca-Restart](Screenshot/soal-10/reboot-verify.png)
+   *Membuktikan klien (`itadori` `192.212.2.10/24`) tetap memperoleh IP dari pool yang benar, memiliki default gateway `192.212.2.1`, dan berhasil melakukan ping ke DHCP Server `tengen` (`192.212.4.10`) dengan `0% packet loss`.*
 
 ---
 
