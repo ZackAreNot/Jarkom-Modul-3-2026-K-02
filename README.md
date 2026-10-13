@@ -666,10 +666,54 @@
 ### Soal
 > Sebuah gangguan memutus jalur relay dan membuat permintaan alamat tidak sampai ke Data Center. Hentikan service DHCP Relay pada jichi, lalu paksa salah satu client di Network 2 atau Network 3 meminta lease baru dan catat gejalanya. Pulihkan service relay, ulangi permintaan DHCP, lalu buktikan bahwa client kembali memperoleh alamat dari pool yang benar dengan gateway semula.
 
-### Langkah Pengerjaan
-1. Penghentian service `isc-dhcp-relay` di `jichi` dan pengujian renew lease pada klien.
-2. Pencatatan gejala kegagalan (DHCPDISCOVER timeout).
-3. Pemulihan service relay dan pengujian ulang perolehan lease.
+### Langkah Pengerjaan dan Analisis Gejala Gangguan
+
+1. **Simulasi Gangguan Jalur Relay (Menghentikan `isc-dhcp-relay` pada `jichi`)**:
+   - Pada node router/relay `jichi`, layanan DHCP Relay dihentikan:
+     ```bash
+     service isc-dhcp-relay stop
+     pkill dhcrelay 2>/dev/null || true
+     ps aux | grep [d]hcrelay
+     ```
+   - Karena `dhcrelay` tidak lagi berjalan pada `jichi`, paket broadcast `DHCPDISCOVER` (`255.255.255.255:67`) dari subnet klien (Network 2 dan Network 3) akan tertahan di batas broadcast domain router `jichi` dan **tidak diteruskan** secara unicast ke DHCP Server `tengen` (`192.212.4.10`) di Network 4.
+
+2. **Pencatatan Gejala Kegagalan Lease Baru pada Klien `itadori` (Network 2)**:
+   - Pada konsol `itadori`, alamat IP lama dihapus lalu dipaksa meminta lease baru:
+     ```bash
+     pkill udhcpc 2>/dev/null || true
+     ip -4 addr flush dev eth0
+     udhcpc -i eth0 -t 3 -T 2 -n -q
+     ip -4 addr show eth0
+     ip route
+     ping -c 2 192.212.2.1
+     ```
+   - **Gejala yang Tercatat**:
+     1. Klien mengirimkan paket `udhcpc: broadcasting discover` berulang kali (3 kali percobaan) tanpa menerima satupun balasan `DHCPOFFER`, hingga akhirnya gagal dengan pesan:
+        `udhcpc failed to get a DHCP lease` / `udhcpc: no lease, failing`.
+     2. Pemeriksaan `ip -4 addr show eth0` kosong — interface `eth0` kehilangan alamat IPv4.
+     3. Tabel routing (`ip route`) kosong — klien kehilangan *default gateway* (`192.212.2.1`) maupun *connected route* (`192.212.2.0/24`).
+     4. Pengujian konektivitas `ping -c 2 192.212.2.1` langsung gagal dengan error `ping: connect: Network unreachable`.
+
+3. **Pemulihan Layanan DHCP Relay & Pengujian Ulang Lease pada `itadori`**:
+   - Pada `jichi`, service DHCP Relay diaktifkan kembali:
+     ```bash
+     service isc-dhcp-relay start
+     ps aux | grep [d]hcrelay
+     ```
+   - Pada `itadori`, permintaan DHCP diulangi:
+     ```bash
+     udhcpc -i eth0 -O broadcast -O search -n -q
+     udhcpc -b -i eth0 -O broadcast -O search >/dev/null 2>&1
+     ip -4 addr show eth0 | grep inet
+     ip route
+     cat /etc/resolv.conf
+     ping -c 2 192.212.2.1
+     ping -c 2 192.212.4.10
+     ```
+   - **Hasil Pemulihan**:
+     - `udhcpc` langsung menerima balasan dari `192.212.4.10`: `udhcpc: lease of 192.212.2.10 obtained from 192.212.4.10, lease time 600`.
+     - Klien `itadori` (`02:42:01:94:12:00`) kembali mendapatkan IP **`192.212.2.10/24`** (sesuai aturan **Pool 1 `pool-dev`**: `192.212.2.10–192.212.2.35`), broadcast `192.212.2.255`, *default gateway* semula **`192.212.2.1`**, serta DNS `192.212.1.2` & `192.212.1.3` (`search k02.com`).
+     - Pengujian `ping` menuju gateway `192.212.2.1` dan DHCP Server `192.212.4.10` kembali berhasil **0% packet loss**.
 
 ### Bukti dan Hasil
 - *Screenshot kegagalan saat relay down*: `Screenshot/soal-9/relay-failure.png`
