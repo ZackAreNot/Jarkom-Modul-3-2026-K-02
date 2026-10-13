@@ -647,8 +647,15 @@
    - **Field `giaddr` (`Gateway-IP`)**: `192.212.3.1` — terbukti sesuai dengan alamat IP interface `eth3` pada router/relay `jichi` yang menghadap langsung ke subnet klien Network 3 (`192.212.3.0/24`).
 
 ### Bukti dan Hasil
-- *Screenshot DORA capture*: `Screenshot/soal-8/dora-packets.png`
-- *Screenshot detail giaddr*: `Screenshot/soal-8/giaddr-detail.png`
+
+1. **Urutan 4 Paket Transaksi DORA (`tcpdump -r /root/dora.pcap -n`)**:
+   ![Urutan Paket DORA](Screenshot/soal-8/dora-packets.png)
+   *Menampilkan urutan 4 paket DHCP (`Request` $\rightarrow$ `Reply` $\rightarrow$ `Request` $\rightarrow$ `Reply`) antara relay `jichi` (`192.212.4.1` / `192.212.3.1`) dan server `tengen` (`192.212.4.10`) untuk klien `ino` (`02:42:c1:1e:00:00`).*
+
+2. **Detail Protokol DORA (`Discover` $\rightarrow$ `Offer` $\rightarrow$ `Request` $\rightarrow$ `ACK`) & Verifikasi Field `giaddr` (`tcpdump -r /root/dora.pcap -n -v`)**:
+   ![Detail DORA dan giaddr Bagian 1](Screenshot/soal-8/giaddr-detail.png)
+   ![Detail DORA dan giaddr Bagian 2](Screenshot/soal-8/giaddr-detail-2.png)
+   *Menampilkan rincian tahapan `Discover`, `Offer`, `Request`, dan `ACK` beserta nilai `Gateway-IP 192.212.3.1` (`giaddr` sesuai interface `eth3` pada `jichi`), `Your-IP 192.212.3.10`, `Server-ID 192.212.4.10`, dan `Lease-Time 1800`.*
 
 ---
 
