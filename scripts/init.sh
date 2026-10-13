@@ -62,6 +62,7 @@ auto eth4
 iface eth4 inet static
     address 192.212.4.1
     netmask 255.255.255.0
+    post-up bash /root/setup_jichi.sh >/var/log/autostart_jichi.log 2>&1 || true
 EOF
 
         # Terapkan IP statis langsung ke kernel
@@ -170,6 +171,7 @@ iface eth0 inet static
     netmask 255.255.255.0
     gateway 192.212.4.1
     up echo "nameserver 192.168.122.1" > /etc/resolv.conf
+    post-up bash /root/setup_tengen.sh >/var/log/autostart_tengen.log 2>&1 || true
 EOF
         ip addr replace 192.212.4.10/24 dev eth0 2>/dev/null || true
         ip route replace default via 192.212.4.1 dev eth0 2>/dev/null || true

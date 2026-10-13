@@ -29,7 +29,19 @@ INTERFACES="eth2 eth3 eth4"
 OPTIONS=""
 EOF
 
-# 4. Restart service isc-dhcp-relay
+# 4. Aktifkan autostart service isc-dhcp-relay (Soal 10)
+update-rc.d isc-dhcp-relay defaults >/dev/null 2>&1 || true
+update-rc.d isc-dhcp-relay enable >/dev/null 2>&1 || true
+if ! grep -q "setup_jichi.sh" /root/.bashrc 2>/dev/null; then
+    cat << 'EOF' >> /root/.bashrc
+# Autostart ISC DHCP Relay (Soal 10)
+if ! pgrep dhcrelay >/dev/null 2>&1; then
+    bash /root/setup_jichi.sh >/dev/null 2>&1 &
+fi
+EOF
+fi
+
+# 5. Restart service isc-dhcp-relay
 echo '[*] Memulai ulang layanan isc-dhcp-relay...'
 pkill -9 dhcrelay 2>/dev/null || true
 sleep 1
@@ -47,4 +59,5 @@ if pgrep dhcrelay >/dev/null; then
 else
     echo "[-] Gagal menjalankan isc-dhcp-relay!"
 fi
+
 

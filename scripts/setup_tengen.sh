@@ -133,19 +133,34 @@ host kugisaki {
 }
 EOF
 
-# 5. Pastikan direktori dan berkas lease tersedia
+# 5. Pastikan direktori dan berkas lease tersedia (pulihkan backup jika kosong saat restart)
 mkdir -p /var/lib/dhcp
+if [ ! -s /var/lib/dhcp/dhcpd.leases ] && [ -s /root/dhcpd.leases.bak ]; then
+    cp /root/dhcpd.leases.bak /var/lib/dhcp/dhcpd.leases
+fi
 touch /var/lib/dhcp/dhcpd.leases
 
-# 6. Validasi sintaks konfigurasi
+# 6. Aktifkan autostart service isc-dhcp-server (Soal 10)
+update-rc.d isc-dhcp-server defaults >/dev/null 2>&1 || true
+update-rc.d isc-dhcp-server enable >/dev/null 2>&1 || true
+if ! grep -q "setup_tengen.sh" /root/.bashrc 2>/dev/null; then
+    cat << 'EOF' >> /root/.bashrc
+# Autostart ISC DHCP Server (Soal 10)
+if ! pgrep dhcpd >/dev/null 2>&1; then
+    bash /root/setup_tengen.sh >/dev/null 2>&1 &
+fi
+EOF
+fi
+
+# 7. Validasi sintaks konfigurasi
 echo '[*] Menjalankan validasi sintaks dhcpd...'
 dhcpd -t -cf /etc/dhcp/dhcpd.conf
 
-# 7. Restart service isc-dhcp-server
+# 8. Restart service isc-dhcp-server
 echo '[*] Memulai ulang layanan isc-dhcp-server...'
 service isc-dhcp-server restart || /etc/init.d/isc-dhcp-server restart || true
 
-# 8. Verifikasi status proses
+# 9. Verifikasi status proses
 sleep 1
 if pgrep dhcpd >/dev/null; then
     echo "[OK] isc-dhcp-server berjalan aktif di node tengen! PID: $(pgrep dhcpd)"
@@ -153,4 +168,6 @@ else
     echo "[-] isc-dhcp-server gagal berjalan. Menjalankan fallback daemon langsung..."
     dhcpd -user dhcpd -group dhcpd -4 -cf /etc/dhcp/dhcpd.conf eth0 || true
 fi
+cp /var/lib/dhcp/dhcpd.leases /root/dhcpd.leases.bak 2>/dev/null || true
+
 

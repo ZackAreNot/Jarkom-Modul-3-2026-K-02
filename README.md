@@ -736,10 +736,52 @@
 ### Soal
 > Setelah gangguan Shibuya tertangani, pastikan pemulihan bertahan setelah restart. Aktifkan autostart DHCP Server pada tengen dan DHCP Relay pada jichi, lalu restart kedua node. Verifikasi status layanan, IP, gateway, lease, dan konektivitas client Network 2–3. Pastikan kebijakan Pool 1, Pool 2, short lease, long lease, dan fixed address tetap berlaku.
 
-### Langkah Pengerjaan
-1. Pemasangan skrip persistensi dan autostart pada `tengen` dan `jichi`.
-2. Eksekusi restart / reload container pada GNS3.
-3. Verifikasi pemulihan otomatis service, routing, dan alokasi IP client.
+### Langkah Pengerjaan dan Implementasi Persistensi
+
+1. **Konfigurasi Mekanisme *Autostart* Berlapis pada `tengen` & `jichi`**:
+   Agar layanan DHCP Server (`tengen`) dan DHCP Relay (`jichi`) beserta seluruh aturan jaringannya otomatis berjalan ketika node di-*restart* (Stop $\rightarrow$ Start / Reload) di GNS3, diterapkan tiga lapisan *autostart* sekaligus:
+   - **SysVinit Runlevel (`update-rc.d`)**:
+     - Pada `tengen`: `update-rc.d isc-dhcp-server defaults && update-rc.d isc-dhcp-server enable` (membuat symlink `/etc/rc2.d/S01isc-dhcp-server`).
+     - Pada `jichi`: `update-rc.d isc-dhcp-relay defaults && update-rc.d isc-dhcp-relay enable` (membuat symlink `/etc/rc2.d/S01isc-dhcp-relay`).
+   - **Hook `post-up` pada `/etc/network/interfaces` (Direktori Persisten GNS3)**:
+     - Saat container menyala, entrypoint GNS3 otomatis mengeksekusi `/etc/network/interfaces`.
+     - Pada `tengen` (`eth0`): ditambahkan `post-up bash /root/setup_tengen.sh >/var/log/autostart_tengen.log 2>&1 || true` yang otomatis menyusun ulang `/etc/dhcp/dhcpd.conf`, memulihkan cadangan `/var/lib/dhcp/dhcpd.leases` dari `/root/dhcpd.leases.bak`, dan menyalakan `isc-dhcp-server`.
+     - Pada `jichi` (`eth4`): ditambahkan `post-up bash /root/setup_jichi.sh >/var/log/autostart_jichi.log 2>&1 || true` yang otomatis mengaktifkan IP forwarding, aturan NAT `MASQUERADE`, serta menyalakan daemon `isc-dhcp-relay`.
+   - **Hook `/root/.bashrc`**:
+     - Pemeriksaan otomatis `if ! pgrep dhcpd` (pada `tengen`) dan `if ! pgrep dhcrelay` (pada `jichi`) sebagai pengaman tambahan ketika konsol dibuka.
+
+2. **Eksekusi *Restart* Node `tengen` & `jichi` dan Verifikasi Layanan**:
+   - Kedua node (`tengen` dan `jichi`) dihentikan (`stop`) lalu dinyalakan kembali (`start`) di GNS3.
+   - Begitu kedua node menyala kembali, log konsol langsung menunjukkan eksekusi otomatis skrip inisialisasi:
+     - **Pada `jichi`**:
+       ```bash
+       ip -4 -br addr show
+       ps aux | grep [d]hcrelay
+       ls -l /etc/rc2.d/*isc-dhcp-relay* /etc/network/interfaces
+       ```
+       Terbukti seluruh IP gateway (`192.212.1.1/24` s.d. `192.212.4.1/24`) aktif dan proses `/usr/sbin/dhcrelay -q -i eth2 -i eth3 -i eth4 192.212.4.10` langsung berjalan (`PID 168`).
+     - **Pada `tengen`**:
+       ```bash
+       ip -4 -br addr show eth0
+       ip route
+       ps aux | grep [d]hcpd
+       ls -l /etc/rc2.d/*isc-dhcp-server* /etc/network/interfaces
+       ```
+       Terbukti IP `192.212.4.10/24` dan default route `via 192.212.4.1` aktif, serta daemon `/usr/sbin/dhcpd -4 -q -cf /etc/dhcp/dhcpd.conf eth0` langsung berjalan (`PID 170`).
+
+3. **Verifikasi Pasca-Restart Seluruh Klien Network 2 & Network 3**:
+   - Seluruh 8 klien diuji perolehan lease, gateway, dan konektivitas `ping` ke server `tengen` (`192.212.4.10`) setelah restart:
+
+| Node | Subnet | Kebijakan yang Berlaku | IP Address Pasca-Restart | Default Gateway | Status di `dhcpd.leases` | Konektivitas (`ping 192.212.4.10`) |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **`itadori`** | Network 2 | **Pool 1** (`192.212.2.10–.2.35`) | `192.212.2.10/24` | `192.212.2.1` | `binding state active` | Berhasil (`0% loss`, `1.07 ms`) |
+| **`fushiguro`** | Network 2 | **Pool 1** (`192.212.2.10–.2.35`) | `192.212.2.11/24` | `192.212.2.1` | `binding state active` | Berhasil (`0% loss`, `0.805 ms`) |
+| **`zenin`** | Network 2 | **Pool 2** (`192.212.2.70–.2.95`) | `192.212.2.70/24` | `192.212.2.1` | `binding state active` | Berhasil (`0% loss`, `0.605 ms`) |
+| **`okkotsu`** | Network 2 | **Pool 2** (`192.212.2.70–.2.95`) | `192.212.2.71/24` | `192.212.2.1` | `binding state active` | Berhasil (`0% loss`, `1.59 ms`) |
+| **`ino`** | Network 3 | **Short Lease** (`.3.10–.3.89`, `1800s`) | `192.212.3.10/24` | `192.212.3.1` | `binding state active` | Berhasil (`0% loss`, `0.931 ms`) |
+| **`kusakabe`** | Network 3 | **Short Lease** (`.3.10–.3.89`, `1800s`) | `192.212.3.11/24` | `192.212.3.1` | `binding state active` | Berhasil (`0% loss`, `0.764 ms`) |
+| **`kugisaki`** | Network 3 | **Fixed Address VIP** (`.3.99`) | `192.212.3.99/24` | `192.212.3.1` | Statis (`host kugisaki`) | Berhasil (`0% loss`, `0.924 ms`) |
+| **`miwa`** | Network 3 | **Long Lease** (`.3.100–.3.199`, `43200s`) | `192.212.3.100/24` | `192.212.3.1` | `binding state active` | Berhasil (`0% loss`, `1.01 ms`) |
 
 ### Bukti dan Hasil
 - *Screenshot status autostart setelah restart*: `Screenshot/soal-10/autostart-status.png`
