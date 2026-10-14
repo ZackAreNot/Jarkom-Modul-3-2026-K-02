@@ -905,8 +905,10 @@
    ![Konfigurasi BIND9 Slave](Screenshot/soal-11/bind9-slave.png)
    *Menampilkan deklarasi zona `jujutsu.k02.com` type master pada `utahime` dengan `allow-transfer`, `also-notify`, SOA record, delegasi NS ke `utahime` & `shoko`, serta deklarasi type slave pada `shoko` yang berhasil menerima file zona di `/var/cache/bind/db.jujutsu.k02.com`.*
 
-2. **Verifikasi Sinkronisasi Zona dan Query `dig` dari Klien**:
-   - *Screenshot verifikasi sinkronisasi zona & dig client*: `Screenshot/soal-11/dig-verify.png`
+2. **Verifikasi Query `dig` dari Klien ke Master (`utahime`) & Slave (`shoko`)**:
+   ![Query dig ke Master utahime](Screenshot/soal-11/dig-master.png)
+   ![Query dig ke Slave shoko](Screenshot/soal-11/dig-slave.png)
+   *Query `dig` dari klien `itadori` ke DNS Master `192.212.1.2` maupun DNS Slave `192.212.1.3` menghasilkan status NOERROR dan mengembalikan A record yang identik (`192.212.1.4`).*
 
 ---
 
