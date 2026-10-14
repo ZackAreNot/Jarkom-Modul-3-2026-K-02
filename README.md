@@ -810,14 +810,97 @@
 ### Soal
 > Utahime dan Shoko ditugaskan membangun sistem penamaan domain resmi agar seluruh pos tidak perlu menghafal alamat IP mentah. Konfigurasikan BIND9 pada utahime sebagai DNS Master dan shoko sebagai DNS Slave untuk mengelola domain jujutsu.<xxxx>.com. Atur SOA record, NS delegasi untuk kedua server, dan terapkan allow-transfer dari Master ke Slave. Pastikan file zona berhasil tersinkronisasi otomatis ke shoko saat nomor serial di utahime dinaikkan, lalu buktikan dengan melakukan query dig ke kedua server dari salah satu client.
 
-### Langkah Pengerjaan
-1. Konfigurasi BIND9 Master pada `utahime` (`jujutsu.k02.com`).
-2. Konfigurasi BIND9 Slave pada `shoko` dengan `masters { 192.212.1.2; };`.
-3. Uji replikasi zona dan query `dig` dari client.
+### Langkah Pengerjaan dan Implementasi
+
+1. **Konfigurasi BIND9 Master pada Node `utahime` (`192.212.1.2`)**:
+   - Memasang paket `bind9`, `bind9-dnsutils`, dan `bind9-utils`:
+     ```bash
+     apt-get update -y && apt-get install -y bind9 bind9-dnsutils bind9-utils
+     ```
+   - Mendefinisikan zona `jujutsu.k02.com` pada `/etc/bind/named.conf.local`:
+     ```named
+     zone "jujutsu.k02.com" {
+         type master;
+         file "/etc/bind/zones/db.jujutsu.k02.com";
+         allow-transfer { 192.212.1.3; };
+         also-notify { 192.212.1.3; };
+         notify yes;
+     };
+     ```
+   - Menyusun file database zona `/etc/bind/zones/db.jujutsu.k02.com`:
+     ```named
+     $TTL    604800
+     @       IN      SOA     utahime.jujutsu.k02.com. root.jujutsu.k02.com. (
+                             2026101402      ; Serial
+                             28800           ; Refresh (8 jam)
+                             7200            ; Retry (2 jam)
+                             2419200         ; Expire (4 minggu)
+                             86400 )         ; Negative Cache TTL (1 hari)
+
+     ; Name Server Delegasi
+     @       IN      NS      utahime.jujutsu.k02.com.
+     @       IN      NS      shoko.jujutsu.k02.com.
+
+     ; A Records Name Server
+     utahime IN      A       192.212.1.2
+     shoko   IN      A       192.212.1.3
+
+     ; Apex A Record menuju gojo
+     @       IN      A       192.212.1.4
+     ```
+   - Memvalidasi sintaks dan me-restart service:
+     ```bash
+     named-checkconf /etc/bind/named.conf
+     named-checkzone jujutsu.k02.com /etc/bind/zones/db.jujutsu.k02.com
+     service named restart
+     ```
+
+2. **Konfigurasi BIND9 Slave pada Node `shoko` (`192.212.1.3`)**:
+   - Memasang paket `bind9` dan `bind9-dnsutils`.
+   - Mendefinisikan zona slave pada `/etc/bind/named.conf.local` yang mengarah ke master `utahime`:
+     ```named
+     zone "jujutsu.k02.com" {
+         type slave;
+         file "/var/cache/bind/db.jujutsu.k02.com";
+         masters { 192.212.1.2; };
+     };
+     ```
+   - Memvalidasi konfigurasi dan me-restart BIND9:
+     ```bash
+     named-checkconf /etc/bind/named.conf
+     service named restart
+     ```
+   - BIND9 pada `shoko` secara otomatis melakukan transfer zona (AXFR) dan menyimpan file cache di `/var/cache/bind/db.jujutsu.k02.com`.
+
+3. **Pengujian Sinkronisasi Otomatis Saat Serial Dinaikkan**:
+   - Pada `utahime`, nomor serial dinaikkan dari `2026101401` menjadi `2026101402`, kemudian dimuat ulang:
+     ```bash
+     sed -i 's/2026101401/2026101402/' /etc/bind/zones/db.jujutsu.k02.com
+     rndc reload jujutsu.k02.com
+     rndc notify jujutsu.k02.com
+     ```
+   - Pada `shoko`, pemeriksaan query SOA lokal:
+     ```bash
+     dig @127.0.0.1 jujutsu.k02.com SOA +short
+     ```
+     membuktikan serial pada slave langsung terbarui menjadi `2026101402`.
+
+4. **Pengujian Query `dig` dari Klien (`itadori`) ke Master & Slave**:
+   - Dari terminal klien `itadori`, dilakukan query DNS ke kedua server:
+     ```bash
+     # Query ke Master utahime (192.212.1.2)
+     dig @192.212.1.2 jujutsu.k02.com
+     dig @192.212.1.2 jujutsu.k02.com SOA
+
+     # Query ke Slave shoko (192.212.1.3)
+     dig @192.212.1.3 jujutsu.k02.com
+     dig @192.212.1.3 jujutsu.k02.com SOA
+     ```
+   - Kedua server merespons dengan status `NOERROR`, mengembalikan A record `192.212.1.4` dan SOA serial `2026101402` yang identik.
 
 ### Bukti dan Hasil
-- *Screenshot konfigurasi BIND9*: `Screenshot/soal-11/bind9-conf.png`
-- *Screenshot verifikasi dig*: `Screenshot/soal-11/dig-verify.png`
+- *Screenshot konfigurasi BIND9 Master & Slave*: `Screenshot/soal-11/bind9-conf.png`
+- *Screenshot verifikasi sinkronisasi zona & dig client*: `Screenshot/soal-11/dig-verify.png`
 
 ---
 
