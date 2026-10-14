@@ -919,14 +919,83 @@
 ### Soal
 > Peta domain harus memetakan pintu masuk utama dan tetap bisa mencari alamat di luar kawasan Shibuya. Pada utahime, buat A record jujutsu.<xxxx>.com yang mengarah ke gojo, serta CNAME www yang merujuk ke domain utama tersebut. Buat pula Reverse DNS (zona PTR) untuk melacak IP gojo kembali ke domain resminya, dan aktifkan fitur DNS Forwarder pada BIND9 mengarah ke IP gateway internet (192.168.122.1). Uji dari client dengan dig untuk mengecek CNAME, PTR, dan buktikan client tetap bisa melakukan ping ke domain internet seperti google.com.
 
-### Langkah Pengerjaan
-1. Penambahan A record `jujutsu.k02.com -> 192.212.1.4` dan CNAME `www`.
-2. Pembuatan zona PTR Reverse DNS untuk IP `gojo`.
-3. Konfigurasi forwarder ke `192.168.122.1` dan pengujian ping internet.
+### Langkah Pengerjaan dan Implementasi
+
+1. **Konfigurasi A Record, CNAME `www`, dan Zona Reverse PTR pada `utahime`**:
+   - Menambahkan deklarasi zona reverse `1.212.192.in-addr.arpa` pada `/etc/bind/named.conf.local`:
+     ```named
+     zone "1.212.192.in-addr.arpa" {
+         type master;
+         file "/etc/bind/zones/db.192.212.1";
+         allow-transfer { 192.212.1.3; };
+         also-notify { 192.212.1.3; };
+         notify yes;
+     };
+     ```
+   - Menambahkan CNAME `www` pada `/etc/bind/zones/db.jujutsu.k02.com`:
+     ```named
+     @       IN      A       192.212.1.4
+     gojo    IN      A       192.212.1.4
+     www     IN      CNAME   jujutsu.k02.com.
+     ```
+   - Membuat file database reverse PTR `/etc/bind/zones/db.192.212.1` untuk memetakan IP `192.212.1.4` kembali ke `jujutsu.k02.com`:
+     ```named
+     $TTL    604800
+     @       IN      SOA     utahime.jujutsu.k02.com. root.jujutsu.k02.com. (
+                             2026101401      ; Serial
+                             28800           ; Refresh (8 jam)
+                             7200            ; Retry (2 jam)
+                             2419200         ; Expire (4 minggu)
+                             86400 )         ; Negative Cache TTL (1 hari)
+
+     @       IN      NS      utahime.jujutsu.k02.com.
+     @       IN      NS      shoko.jujutsu.k02.com.
+
+     ; PTR Record melacak IP gojo (192.212.1.4) ke domain resmi
+     4       IN      PTR     jujutsu.k02.com.
+     ```
+
+2. **Konfigurasi DNS Forwarder pada BIND9 (`named.conf.options`)**:
+   - Mengaktifkan forwarder ke gateway internet `192.168.122.1` pada `/etc/bind/named.conf.options` di server DNS:
+     ```named
+     options {
+         directory "/var/cache/bind";
+
+         forwarders {
+             192.168.122.1;
+         };
+
+         allow-query { any; };
+         auth-nxdomain no;
+         listen-on-v6 { any; };
+         dnssec-validation no;
+     };
+     ```
+   - Dengan opsi ini, query domain eksternal/internet (seperti `google.com`) yang diterima dari klien lokal akan diteruskan (*forwarded*) secara rekursif ke upstream DNS gateway `192.168.122.1`.
+
+3. **Verifikasi Query dari Klien (`itadori`)**:
+   - **Pemeriksaan CNAME**:
+     ```bash
+     dig @192.212.1.2 www.jujutsu.k02.com
+     ```
+     Menghasilkan jawaban:
+     - `www.jujutsu.k02.com. IN CNAME jujutsu.k02.com.`
+     - `jujutsu.k02.com. IN A 192.212.1.4` (IP `gojo`).
+   - **Pemeriksaan Reverse PTR**:
+     ```bash
+     dig @192.212.1.2 -x 192.212.1.4
+     ```
+     Menghasilkan jawaban:
+     - `4.1.212.192.in-addr.arpa. IN PTR jujutsu.k02.com.`
+   - **Pemeriksaan DNS Forwarder & Ping Domain Internet**:
+     ```bash
+     ping -c 3 google.com
+     ```
+     Klien berhasil me-resolve hostname `google.com` via DNS internal `192.212.1.2` dan melakukan ping ke internet dengan **0% packet loss**.
 
 ### Bukti dan Hasil
-- *Screenshot dig A record & CNAME*: `Screenshot/soal-12/dig-a-cname.png`
-- *Screenshot dig PTR & ping internet*: `Screenshot/soal-12/dig-ptr-ping.png`
+- *Screenshot konfigurasi zona CNAME, PTR & Forwarder*: `Screenshot/soal-12/dns-conf.png`
+- *Screenshot verifikasi dig CNAME, PTR & ping google.com*: `Screenshot/soal-12/dig-ptr-ping.png`
 
 ---
 
