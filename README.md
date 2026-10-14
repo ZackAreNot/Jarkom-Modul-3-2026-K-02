@@ -1601,15 +1601,72 @@
 ### Soal
 > Sebelum Curtain di Shibuya resmi dibuka, Kusakabe memimpin audit untuk menguji kapasitas layanan. Dari terminal kusakabe, jalankan benchmark menggunakan Apache Benchmark dengan parameter -n 600 -c 30 menuju http://jujutsu.<xxxx>.com/. Catat Requests per Second (RPS), latensi, dan jumlah request yang gagal. Lakukan pengujian tambahan pada endpoint /api untuk mengamati efek rate limiting. Bandingkan hasil pengujian baseline dengan hasil ketika rate limiting aktif, serta gunakan access log gojo untuk membedakan kegagalan aplikasi, koneksi, dan request yang ditolak oleh kebijakan rate limit.
 
-### Langkah Pengerjaan
-1. Instalasi `apache2-utils` pada `kusakabe`.
-2. Eksekusi `ab -n 600 -c 30 http://jujutsu.k02.com/` dan pengujian pada endpoint `/api`.
-3. Analisis metrik RPS, latency, failed requests, dan access log `gojo`.
+### Langkah Pengerjaan dan Implementasi
+
+1. **Instalasi Apache Benchmark pada Node `kusakabe`**:
+   - Node `kusakabe` berbasis Alpine Linux yang beroperasi pada subnet Divisi B (`192.212.3.11`).
+   - Memperbarui repository dan menginstal paket utilitas `apache2-utils`:
+     ```bash
+     apk update
+     apk add apache2-utils
+     ```
+   - Memverifikasi ketersediaan biner ApacheBench:
+     ```bash
+     ab -V
+     ```
+
+2. **Eksekusi Audit Kapasitas Layanan**:
+   - **Audit 1: Pengujian Baseline pada Web Utama (`http://jujutsu.k02.com/`)**:
+     - Mengirimkan 600 request dengan 30 concurrent connection menuju root web frontend:
+       ```bash
+       ab -n 600 -c 30 http://jujutsu.k02.com/
+       ```
+     - Hasil benchmark mendokumentasikan performa tinggi berkat optimasi Nginx Proxy Caching.
+   - **Audit 2: Pengujian Efek Rate Limiting pada Endpoint API (`http://jujutsu.k02.com/api`)**:
+     - Mengirimkan beban trafik yang sama (600 request, konkurensi 30) menuju endpoint API:
+       ```bash
+       ab -n 600 -c 30 http://jujutsu.k02.com/api
+       ```
+     - Hasil benchmark mendokumentasikan penolakan request berlebih sesuai batas kuota 10 request/detik.
+   - **Audit 3: Verifikasi Log Akses pada Node `gojo`**:
+     - Memeriksa file log akses Nginx pada node `gojo`:
+       ```bash
+       tail -n 20 /var/log/nginx/access.log
+       ```
+     - Memvalidasi pencatatan kode status `503` dari IP sumber `192.212.3.11` (`kusakabe`).
+
+3. **Analisis dan Komparasi Hasil Benchmark**:
+   - **Tabel Komparasi Performa**:
+     | Metrik Evaluasi | Web Root (`/`) [Baseline + Cache] | Endpoint API (`/api`) [Rate Limiting] |
+     | :--- | :--- | :--- |
+     | **Total Requests / Concurrency** | 600 req / 30 concurrent | 600 req / 30 concurrent |
+     | **Waktu Pengujian (Time Taken)** | 0.126 detik | 0.098 detik |
+     | **Requests per Second (RPS)** | **4,749.39 #/detik** | **6,123.76 #/detik** |
+     | **Time per Request (Mean)** | 6.317 ms | 4.899 ms |
+     | **Time per Request (Concurrent)** | 0.211 ms | 0.163 ms |
+     | **Failed Requests** | **0 (0.00%)** | 596 (Length discrepancy) |
+     | **Non-2xx Responses** | **0** | **594 (HTTP 503)** |
+     | **Kegagalan Koneksi (Connect/Recv)** | 0 / 0 | 0 / 0 |
+     | **Karakteristik Layanan** | Respons 200 OK penuh dari cache | Proteksi Rate Limit aktif menolak burst |
+
+   - **Interpretasi Analisis**:
+     - **Web Frontend (`/`)**: Menunjukkan ketahanan absolut tanpa ada request yang gagal (`Failed requests: 0`). Fitur Nginx Proxy Caching berhasil melayani trafik masif tanpa membebani backend server PHP (`maki` & `panda`), menghasilkan latensi rata-rata hanya 6.317 ms.
+     - **Endpoint API (`/api`)**: Tercatat sebanyak **594 Non-2xx responses**. Nilai `Connect: 0`, `Receive: 0`, dan `Exceptions: 0` membuktikan bahwa server dan jaringan dalam kondisi sangat prima (tidak ada crash, timeout, atau connection reset). Kegagalan 594 request tersebut murni merupakan respons `HTTP 503 Service Temporarily Unavailable` yang sengaja dibangkitkan oleh modul Nginx Rate Limiting (`limit_req_zone 10r/s`) untuk mencegah kelebihan beban pada cluster worker API dan database.
+     - **Access Log `gojo`**: Membuktikan bahwa drop request tercatat secara transparan dengan pola `192.212.3.11 - - [...] "GET /api HTTP/1.0" 503 190 "-" "ApacheBench/2.3"`.
 
 ### Bukti dan Hasil
-- *Screenshot hasil ab benchmark root*: `Screenshot/soal-20/ab-root.png`
-- *Screenshot hasil ab benchmark /api*: `Screenshot/soal-20/ab-api.png`
-- *Screenshot access log gojo*: `Screenshot/soal-20/access-log.png`
+
+1. **Hasil Apache Benchmark pada Web Utama (Baseline + Cache)**:
+   ![Hasil Benchmark Web Utama](Screenshot/soal-20/ab-root.png)
+   *Membuktikan performa web root dengan 600 request dan konkurensi 30 menghasilkan RPS 4749.39 #/detik dengan 0 failed requests.*
+
+2. **Hasil Apache Benchmark pada Endpoint `/api` (Efek Rate Limiting Aktif)**:
+   ![Hasil Benchmark API Rate Limiting](Screenshot/soal-20/ab-api.png)
+   *Membuktikan proteksi rate limiting: 594 request berlebih ditolak dengan status Non-2xx (HTTP 503), tanpa adanya kegagalan koneksi jaringan.*
+
+3. **Pencatatan Drop Request pada Access Log `gojo`**:
+   ![Access Log Drop Rate Limiting](Screenshot/soal-20/access-log.png)
+   *Menampilkan pencatatan status HTTP 503 dari klien kusakabe (192.212.3.11) pada log akses gojo saat rate limit terlampaui.*
 
 ---
 
