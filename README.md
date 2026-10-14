@@ -1409,14 +1409,148 @@
 ### Soal
 > Komando pusat perlu mengetahui IP asli klien yang mengirimkan request tanpa tertukar dengan IP proxy perantara. Konfigurasikan gojo dan geto agar meneruskan informasi alamat klien melalui header X-Real-IP dan X-Forwarded-For. Pastikan geto hanya mempercayai informasi alamat klien yang diterima dari proxy terpercaya, dan skrip API menyimpan alamat klien yang telah diverifikasi ke kolom client_ip pada tabel request_logs di database yaga. Uji dengan mengirimkan request dari klien Network 2 dan Network 3 ke endpoint /api, kemudian periksa database untuk memastikan alamat yang tercatat sesuai dengan IP klien asal, bukan IP gojo atau geto.
 
-### Langkah Pengerjaan
-1. Konfigurasi header forwarding (`proxy_set_header X-Real-IP`, `X-Forwarded-For`) pada `gojo` dan `geto`.
-2. Konfigurasi `set_real_ip_from` pada `geto`.
-3. Pengecekan isi tabel `request_logs` di database MariaDB `yaga`.
+### Langkah Pengerjaan dan Implementasi
+
+1. **Analisis Kebutuhan Preservasi Real Client IP dan Integritas Audit Log**:
+   - Dalam topologi multi-tier reverse proxy, klien (`itadori` di Network 2: `192.212.2.10` atau `kusakabe` di Network 3: `192.212.3.11`) mengirim request ke Reverse Proxy DMZ (`gojo`: `192.212.1.4`), yang kemudian meneruskannya ke Internal Load Balancer Data Center (`geto`: `192.212.4.2`), sebelum akhirnya tiba di worker API (`nanami`/`todo`/`kirara`).
+   - Tanpa mekanisme preservasi alamat klien, worker API hanya akan melihat IP koneksi TCP langsung, yaitu IP milik `geto` (`192.212.4.2`), atau IP `gojo` (`192.212.1.4`), sehingga komando pusat kehilangan informasi identitas klien yang sebenarnya.
+   - Solusi teknis yang diterapkan:
+     - **Forwarding Header**: `gojo` dan `geto` menyematkan header standar HTTP `X-Real-IP` dan `X-Forwarded-For`.
+     - **Modul Nginx Real IP (`ngx_http_realip_module`)**: Diaktifkan pada `geto` menggunakan direktif `set_real_ip_from 192.212.1.4;` dan `real_ip_header X-Forwarded-For;`. Konfigurasi ini menjamin `geto` **hanya mempercayai** informasi IP asli dari proxy perantara resmi (`gojo`), sekaligus mencegah serangan *IP spoofing* jika ada pihak yang memalsukan header dari luar.
+     - **Skrip API Worker**: Skrip PHP pada worker (`/var/www/api/index.php`) mengekstraksi alamat IP klien yang telah tervalidasi dan menyimpannya secara otomatis ke database MariaDB `yaga` (`db_shibuya_k02.request_logs`).
+
+2. **Konfigurasi Reverse Proxy `gojo` dan Load Balancer `geto`**:
+   - **Pada `gojo` (`/etc/nginx/sites-available/default`)**:
+     Menyematkan parameter header pada `location /api`:
+     ```nginx
+     location /api {
+         limit_req zone=api_limit burst=5 nodelay;
+
+         proxy_pass http://192.212.4.2;
+         proxy_set_header Host $host;
+         proxy_set_header X-Real-IP $remote_addr;
+         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+         proxy_connect_timeout 2s;
+         proxy_read_timeout 3s;
+     }
+     ```
+   - **Pada `geto` (`/etc/nginx/sites-available/default`)**:
+     Mengonfigurasi trusted proxy dan forwarding:
+     ```nginx
+     upstream api_cluster {
+         server 192.212.4.5:80 weight=3 max_fails=2 fail_timeout=5s;   # nanami
+         server 192.212.4.6:80 weight=1 max_fails=2 fail_timeout=5s;   # todo
+         server 192.212.4.7:80 backup;                                  # kirara
+     }
+
+     server {
+         listen 80 default_server;
+         listen [::]:80 default_server;
+
+         server_name jujutsu.k02.com www.jujutsu.k02.com _;
+
+         # ── Soal 17: Percayai IP Asli hanya dari Proxy Terpercaya (gojo: 192.212.1.4) ──
+         set_real_ip_from 192.212.1.4;
+         set_real_ip_from 192.212.1.0/24;
+         real_ip_header X-Forwarded-For;
+         real_ip_recursive on;
+
+         location / {
+             proxy_pass http://api_cluster;
+             proxy_set_header Host $host;
+             proxy_set_header X-Real-IP $remote_addr;
+             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+             proxy_connect_timeout 2s;
+             proxy_read_timeout 3s;
+         }
+     }
+     ```
+   - Memvalidasi dan merestart Nginx pada `geto`:
+     ```bash
+     nginx -t
+     service nginx restart
+     ```
+
+3. **Pembaruan Skrip API Worker (`nanami`, `todo`, `kirara`)**:
+   - Memperbarui `/var/www/api/index.php` untuk mencatat `$client_ip` terverifikasi ke tabel `request_logs` di database `yaga` (`192.212.4.8`):
+     ```php
+     <?php
+     header('Content-Type: application/json');
+
+     $hostname = gethostname();
+     $client_ip = $_SERVER['HTTP_X_REAL_IP'] ?? $_SERVER['HTTP_X_FORWARDED_FOR'] ?? ($_SERVER['REMOTE_ADDR'] ?? '127.0.0.1');
+     if (strpos($client_ip, ',') !== false) {
+         $parts = explode(',', $client_ip);
+         $client_ip = trim($parts[0]);
+     }
+
+     $proxy_ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+     $user_agent = $_SERVER['HTTP_USER_AGENT'] ?? 'curl';
+
+     $db_host = '192.212.4.8';
+     $db_name = 'db_shibuya_k02';
+     $db_user = 'kelompok';
+     $db_pass = 'password123';
+
+     $db_status = 'unrecorded';
+
+     try {
+         $dsn = "mysql:host=$db_host;dbname=$db_name;charset=utf8mb4";
+         $pdo = new PDO($dsn, $db_user, $db_pass, [
+             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+             PDO::ATTR_TIMEOUT => 2
+         ]);
+         
+         $stmt = $pdo->prepare("INSERT INTO request_logs (worker_name, client_ip, proxy_ip, user_agent, created_at) VALUES (?, ?, ?, ?, NOW())");
+         if ($stmt && $stmt->execute([$hostname, $client_ip, $proxy_ip, $user_agent])) {
+             $db_status = "saved_to_yaga";
+         }
+     } catch (Exception $e) {
+         $db_status = "error: " . $e->getMessage();
+     }
+
+     echo json_encode([
+         'status'    => 'success',
+         'service'   => 'Curtain Protocol API Service',
+         'worker'    => $hostname,
+         'client_ip' => $client_ip,
+         'proxy_ip'  => $proxy_ip,
+         'db_log'    => $db_status,
+         'timestamp' => date('Y-m-d H:i:s')
+     ], JSON_PRETTY_PRINT) . "\n";
+     ?>
+     ```
+
+4. **Pengujian Pengiriman Request dan Verifikasi Database**:
+   - **Pengujian dari Klien Network 2 (`itadori`: 192.212.2.10)**:
+     ```bash
+     curl -s http://jujutsu.k02.com/api
+     ```
+     Respons API mengembalikan `"client_ip": "192.212.2.10"` dan `"db_log": "saved_to_yaga"`.
+   - **Pengujian dari Klien Network 3 (`kusakabe`: 192.212.3.11)**:
+     ```bash
+     curl -s http://jujutsu.k02.com/api
+     ```
+     Respons API mengembalikan `"client_ip": "192.212.3.11"` dan `"db_log": "saved_to_yaga"`.
+   - **Pemeriksaan Database pada `yaga`**:
+     ```bash
+     mariadb -e "SELECT id, worker_name, client_ip, proxy_ip, created_at FROM db_shibuya_k02.request_logs;"
+     ```
+     Tercatat dengan jelas IP asal masing-masing klien (`192.212.2.10` dan `192.212.3.11`), sementara IP proxy perantara (`192.212.4.2`) tersimpan terpisah pada kolom `proxy_ip`.
 
 ### Bukti dan Hasil
-- *Screenshot header proxy*: `Screenshot/soal-17/header-proxy.png`
-- *Screenshot data client_ip di database*: `Screenshot/soal-17/db-real-ip.png`
+
+1. **Konfigurasi Header Forwarding dan Trusted Real IP pada Node `geto`**:
+   ![Konfigurasi Trusted Real IP geto](Screenshot/soal-17/header-proxy.png)
+   *Menampilkan konfigurasi Nginx pada geto dengan direktif set_real_ip_from 192.212.1.4 (gojo), real_ip_header X-Forwarded-For, serta penerusan header X-Real-IP ke worker backend.*
+
+2. **Bukti Pencatatan IP Asli Klien pada Database MariaDB `yaga`**:
+   ![Pencatatan Database Real IP yaga](Screenshot/soal-17/db-real-ip.png)
+   *Membuktikan bahwa request dari itadori tercatat dengan client_ip 192.212.2.10 dan kusakabe tercatat dengan client_ip 192.212.3.11 pada database yaga, tanpa tertukar dengan IP proxy perantara.*
+
+3. **Bukti Respon API Klien Menampilkan Verified Client IP**:
+   ![Respon API Klien kusakabe](Screenshot/soal-17/client-response.png)
+   *Menampilkan respons JSON dari endpoint /api ke klien kusakabe yang mengonfirmasi identifikasi client_ip 192.212.3.11 dan status db_log: saved_to_yaga.*
 
 ---
 

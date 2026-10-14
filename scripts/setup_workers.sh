@@ -106,37 +106,45 @@ EOF
 header('Content-Type: application/json');
 
 $hostname = gethostname();
-// Mendapatkan IP asli klien yang diteruskan oleh proxy gojo & geto (Soal 17)
-$client_ip = $_SERVER['HTTP_X_REAL_IP'] ?? $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'];
+// Mendapatkan IP asli klien yang diverifikasi oleh proxy gojo & geto (Soal 17)
+$client_ip = $_SERVER['HTTP_X_REAL_IP'] ?? $_SERVER['HTTP_X_FORWARDED_FOR'] ?? ($_SERVER['REMOTE_ADDR'] ?? '127.0.0.1');
+if (strpos($client_ip, ',') !== false) {
+    $parts = explode(',', $client_ip);
+    $client_ip = trim($parts[0]);
+}
+
+$proxy_ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+$user_agent = $_SERVER['HTTP_USER_AGENT'] ?? 'curl';
 
 // Konfigurasi Database Master Yaga (Network 4: 192.212.4.8)
 $db_host = '192.212.4.8';
-$db_user = 'shibuya_user';
-$db_pass = 'shibuya_pass';
 $db_name = 'db_shibuya_k02';
+$db_user = 'kelompok';
+$db_pass = 'password123';
 
 $db_status = "unrecorded";
 
 try {
     $dsn = "mysql:host=$db_host;dbname=$db_name;charset=utf8mb4";
     $pdo = new PDO($dsn, $db_user, $db_pass, [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_SILENT,
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_TIMEOUT => 2
     ]);
     
-    $stmt = $pdo->prepare("INSERT INTO request_logs (worker_name, client_ip, request_uri, created_at) VALUES (?, ?, ?, NOW())");
-    if ($stmt && $stmt->execute([$hostname, $client_ip, $_SERVER['REQUEST_URI'] ?? '/api'])) {
+    $stmt = $pdo->prepare("INSERT INTO request_logs (worker_name, client_ip, proxy_ip, user_agent, created_at) VALUES (?, ?, ?, ?, NOW())");
+    if ($stmt && $stmt->execute([$hostname, $client_ip, $proxy_ip, $user_agent])) {
         $db_status = "saved_to_yaga";
     }
 } catch (Exception $e) {
-    $db_status = "db_offline_or_uninitialized";
+    $db_status = "error: " . $e->getMessage();
 }
 
 echo json_encode([
     'status'    => 'success',
-    'message'   => 'Curtain Protocol API Service',
+    'service'   => 'Curtain Protocol API Service',
     'worker'    => $hostname,
     'client_ip' => $client_ip,
+    'proxy_ip'  => $proxy_ip,
     'db_log'    => $db_status,
     'timestamp' => date('Y-m-d H:i:s')
 ], JSON_PRETTY_PRINT) . "\n";
