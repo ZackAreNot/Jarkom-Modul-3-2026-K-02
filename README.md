@@ -1133,14 +1133,117 @@
 ### Soal
 > Para penyihir lapangan bersiaga di Data Center sebagai pekerja backend untuk memproses aplikasi. Pasang Nginx dan PHP-FPM pada maki dan panda untuk menyajikan web frontend yang menampilkan hostname masing-masing. Pada nanami, todo, dan kirara, siapkan layanan API yang mencatat log request ke database yaga. Konfigurasikan virtual host agar worker merespons domain layanan yang ditentukan. Batasi akses langsung dari klien ke worker, web worker hanya menerima trafik melalui jalur proxy web yang ditentukan, sedangkan worker API hanya menerima trafik melalui geto. Uji bahwa akses langsung dari klien ditolak, sementara akses melalui reverse proxy tetap berhasil.
 
-### Langkah Pengerjaan
-1. Pemasangan Nginx + PHP-FPM pada frontend worker (`maki`, `panda`) dan API worker (`nanami`, `todo`, `kirara`).
-2. Pembatasan akses langsung (ACL `allow`/`deny` atau iptables).
-3. Pengujian akses ditolak secara langsung dan berhasil via proxy.
+### Langkah Pengerjaan dan Implementasi
+
+1. **Konfigurasi Web Frontend Worker (`maki` & `panda`)**:
+   - Memasang `nginx`, `php-fpm`, dan `php-mysql` pada kedua worker frontend (`192.212.4.3` dan `192.212.4.4`).
+   - Membuat berkas `/var/www/html/index.php` yang menyajikan antarmuka web dan mencetak nama hostname masing-masing:
+     ```php
+     <?php
+     $host = gethostname();
+     echo "<h1>Frontend Web - Jujutsu High</h1>\n";
+     echo "<p>Worker Hostname: <strong>" . htmlspecialchars($host) . "</strong></p>\n";
+     ?>
+     ```
+   - Mengonfigurasi berkas virtual host `/etc/nginx/sites-available/default` dengan pembatasan akses (ACL):
+     ```nginx
+     server {
+         listen 80 default_server;
+         listen [::]:80 default_server;
+
+         server_name jujutsu.k02.com www.jujutsu.k02.com _;
+         root /var/www/html;
+         index index.php index.html;
+
+         # ACL: Hanya izinkan dari proxy publik gojo dan jaringan internal Data Center
+         allow 192.212.1.4;       # Public Reverse Proxy (gojo)
+         allow 192.212.4.0/24;     # Subnet internal Data Center
+         allow 127.0.0.1;
+         allow ::1;
+         deny all;                # Tolak seluruh akses langsung dari klien luar
+
+         location / {
+             try_files $uri $uri/ /index.php?$args;
+         }
+
+         location ~ \.php$ {
+             include snippets/fastcgi-php.conf;
+             fastcgi_pass unix:/run/php/php8.4-fpm.sock;
+         }
+     }
+     ```
+
+2. **Konfigurasi API Worker (`nanami`, `todo`, dan `kirara`)**:
+   - Memasang `nginx`, `php-fpm`, dan `php-mysql` pada ketiga worker API (`192.212.4.5`, `192.212.4.6`, dan `192.212.4.7`).
+   - Membuat endpoint API pada `/var/www/api/index.php` yang mengembalikan respon berformat JSON serta menangkap IP asli klien (`client_ip`):
+     ```php
+     <?php
+     header('Content-Type: application/json');
+     $host = gethostname();
+     $client_ip = $_SERVER['HTTP_X_REAL_IP'] ?? $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'];
+
+     echo json_encode([
+         'status'    => 'success',
+         'service'   => 'Curtain Protocol API',
+         'worker'    => $host,
+         'client_ip' => $client_ip,
+         'timestamp' => date('Y-m-d H:i:s')
+     ], JSON_PRETTY_PRINT) . "\n";
+     ?>
+     ```
+   - Mengonfigurasi berkas virtual host `/etc/nginx/sites-available/default` dengan aturan ACL yang membatasi akses hanya melalui Internal Load Balancer `geto`:
+     ```nginx
+     server {
+         listen 80 default_server;
+         listen [::]:80 default_server;
+
+         server_name jujutsu.k02.com www.jujutsu.k02.com _;
+         root /var/www/api;
+         index index.php index.html;
+
+         # ACL: Hanya izinkan dari geto dan jaringan internal Data Center
+         allow 192.212.4.2;       # Internal Load Balancer (geto)
+         allow 192.212.4.0/24;     # Subnet internal Data Center
+         allow 127.0.0.1;
+         allow ::1;
+         deny all;                # Tolak seluruh akses langsung dari klien luar
+
+         location / {
+             try_files $uri $uri/ /index.php?$args;
+         }
+
+         location ~ \.php$ {
+             include snippets/fastcgi-php.conf;
+             fastcgi_pass unix:/run/php/php8.4-fpm.sock;
+         }
+     }
+     ```
+
+3. **Pengujian Fungsionalitas dan Validasi ACL**:
+   - **Uji Respon Lokal Worker**: Melakukan `curl -s http://localhost` pada `maki` dan `nanami` untuk memastikan skrip PHP berhasil dirender dan menampilkan nama worker masing-masing.
+   - **Uji Penolakan Akses Langsung (Client Denial)**: Dari terminal client `itadori` (Network 2), dilakukan `curl -I http://192.212.4.3` dan `curl -I http://192.212.4.5`. Keduanya menghasilkan kode respon `HTTP/1.1 403 Forbidden` membuktikan kebijakan ACL aktif dan berhasil memblokir akses langsung.
+   - **Uji Keberhasilan Akses via Proxy**: Dari node `gojo` (`192.212.1.4`) ke `maki` dan dari node `geto` (`192.212.4.2`) ke `nanami`, permintaan `curl -I` berhasil dengan kode respon `HTTP/1.1 200 OK`.
 
 ### Bukti dan Hasil
-- *Screenshot response worker*: `Screenshot/soal-14/worker-response.png`
-- *Screenshot uji ACL*: `Screenshot/soal-14/acl-test.png`
+
+1. **Verifikasi Respon Frontend Worker (`maki`)**:
+   ![Respons Frontend Worker maki](Screenshot/soal-14/maki-response.png)
+   *Menampilkan respon halaman web frontend dari worker maki yang menampilkan hostname 'maki' secara dinamis.*
+
+2. **Verifikasi Respon API Worker (`nanami`)**:
+   ![Respons API Worker nanami](Screenshot/soal-14/nanami-response.png)
+   *Menampilkan respon JSON dari endpoint API worker nanami yang memuat nama worker 'nanami' dan penanda waktu.*
+
+3. **Pengujian Pembatasan Akses Langsung dari Klien (`itadori`)**:
+   ![Akses Langsung Klien Ditolak](Screenshot/soal-14/acl-itadori-deny.png)
+   *Membuktikan permintaan langsung dari klien itadori ke maki (192.212.4.3) dan nanami (192.212.4.5) langsung ditolak dengan status HTTP 403 Forbidden.*
+
+4. **Pengujian Keberhasilan Akses Melalui Jalur Proxy (`gojo` & `geto`)**:
+   ![Akses Diterima dari Proxy gojo](Screenshot/soal-14/acl-gojo-allow.png)
+   *Membuktikan akses dari reverse proxy gojo menuju web worker maki (192.212.4.3) diizinkan dengan status HTTP 200 OK.*
+
+   ![Akses Diterima dari Load Balancer geto](Screenshot/soal-14/acl-geto-allow.png)
+   *Membuktikan akses dari internal load balancer geto menuju API worker nanami (192.212.4.5) diizinkan dengan status HTTP 200 OK.*
 
 ---
 
@@ -1151,14 +1254,67 @@
 ### Soal
 > Geto bertugas mengendalikan pembagian beban request API di internal Data Center agar server tidak tumbang bersamaan. Konfigurasikan Nginx pada geto sebagai Load Balancer internal dengan upstream api_cluster yang mengarahkan trafik ke nanami dan todo. Terapkan algoritma Weighted Round Robin dengan bobot 3:1, di mana nanami menerima porsi beban tiga kali lebih banyak daripada todo. Buktikan distribusi beban ini dengan melakukan loop request berulang kali ke geto dari jaringan lokal Data Center dan periksa rasio responnya.
 
-### Langkah Pengerjaan
-1. Konfigurasi upstream `api_cluster` di `geto` (`weight=3` untuk nanami, `weight=1` untuk todo).
-2. Uji distribusi beban menggunakan skrip looping request.
-3. Analisis rasio respon 3:1.
+### Langkah Pengerjaan dan Implementasi
+
+1. **Analisis Kebutuhan Load Balancing Internal**:
+   - Node **`geto`** (`192.212.4.2`) bertindak sebagai *Internal Load Balancer* di Data Center (Network 4).
+   - Layanan API backend dioperasikan oleh dua worker utama:
+     - **`nanami`** (`192.212.4.5:80`): Worker API utama 1 dengan prioritas tinggi (**bobot 3**).
+     - **`todo`** (`192.212.4.6:80`): Worker API utama 2 (**bobot 1**).
+   - Algoritma pembagian beban yang digunakan adalah **Weighted Round Robin** dengan rasio bobot **3:1**. Artinya, dari setiap siklus 4 request yang masuk ke `geto`, 3 request akan diteruskan ke `nanami` dan 1 request diteruskan ke `todo`.
+
+2. **Konfigurasi Upstream dan Reverse Proxy pada `geto`**:
+   - Memasang berkas konfigurasi `/etc/nginx/sites-available/default` pada node `geto`:
+     ```nginx
+     upstream api_cluster {
+         # Algoritma Weighted Round Robin dengan bobot 3:1
+         server 192.212.4.5:80 weight=3;   # nanami
+         server 192.212.4.6:80 weight=1;   # todo
+     }
+
+     server {
+         listen 80 default_server;
+         listen [::]:80 default_server;
+
+         server_name jujutsu.k02.com www.jujutsu.k02.com _;
+
+         location / {
+             proxy_pass http://api_cluster;
+             proxy_set_header Host $host;
+             proxy_set_header X-Real-IP $remote_addr;
+             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+             proxy_connect_timeout 2s;
+             proxy_read_timeout 3s;
+         }
+     }
+     ```
+   - Memvalidasi sintaks dan memuat ulang layanan Nginx:
+     ```bash
+     nginx -t
+     service nginx restart
+     ```
+
+3. **Pengujian Distribusi Beban (Loop 40 Requests)**:
+   - Menjalankan skrip pengujian perulangan (*loop*) sebanyak 40 request dari jaringan lokal Data Center (`geto`) menuju virtual IP balancer:
+     ```bash
+     for i in $(seq 1 40); do
+         curl -s http://192.212.4.2 | grep '"worker"'
+     done | sort | uniq -c
+     ```
+   - Hasil akumulasi respon:
+     - `nanami`: **30 respon** (75%)
+     - `todo`: **10 respon** (25%)
+   - Rasio respon terhitung adalah **30 : 10 = 3 : 1**, membuktikan algoritma Weighted Round Robin bekerja secara presisi sesuai spesifikasi soal.
 
 ### Bukti dan Hasil
-- *Screenshot konfigurasi upstream geto*: `Screenshot/soal-15/geto-upstream.png`
-- *Screenshot hasil loop request*: `Screenshot/soal-15/loop-ratio.png`
+
+1. **Konfigurasi Upstream `api_cluster` di Node `geto`**:
+   ![Konfigurasi Upstream geto](Screenshot/soal-15/geto-upstream.png)
+   *Menampilkan blok deklarasi upstream `api_cluster` dengan server nanami (weight=3) dan todo (weight=1).*
+
+2. **Pembuktian Distribusi Rasio 3:1 Melalui Loop Request**:
+   ![Hasil Loop Request Rasio 3:1](Screenshot/soal-15/loop-ratio.png)
+   *Membuktikan dari 40 request beruntun, nanami menerima 30 request dan todo menerima 10 request, menghasilkan rasio distribusi beban 3:1 secara akurat.*
 
 ---
 
@@ -1169,14 +1325,80 @@
 ### Soal
 > Gojo berdiri di perbatasan DMZ sebagai gerbang publik tunggal bagi seluruh client dari luar maupun dalam. Konfigurasikan Nginx pada gojo untuk melayani domain jujutsu.<xxxx>.com dan www.jujutsu.<xxxx>.com menggunakan metode Path-Based Routing. Atur agar request root (/) diteruskan secara Round Robin ke worker frontend (maki dan panda), sedangkan request ke path /api diteruskan langsung ke geto. Uji dari client Divisi A atau B bahwa akses ke web utama dibalas oleh Maki/Panda, sedangkan akses ke /api diteruskan dan dijawab oleh Nanami/Todo.
 
-### Langkah Pengerjaan
-1. Konfigurasi Nginx `gojo` dengan server_name `jujutsu.k02.com` dan `www.jujutsu.k02.com`.
-2. Pengaturan routing: `location /` proxy ke frontend worker, `location /api` proxy ke `geto`.
-3. Pengujian akses dari klien Divisi A dan Divisi B.
+### Langkah Pengerjaan dan Implementasi
+
+1. **Analisis Kebutuhan Public Reverse Proxy (DMZ)**:
+   - Node **`gojo`** (`192.212.1.4`) bertindak sebagai *Public Reverse Proxy* tunggal di zona DMZ (Network 1) yang menerima seluruh permintaan dari klien luar (Network 2 dan Network 3).
+   - Domain yang dilayani: **`jujutsu.k02.com`** dan **`www.jujutsu.k02.com`**.
+   - Metode perutean yang diterapkan adalah **Path-Based Routing**:
+     - Permintaan ke **root (`/`)**: Diteruskan secara *Round Robin* ke worker frontend (**`maki`** `192.212.4.3:80` dan **`panda`** `192.212.4.4:80`).
+     - Permintaan ke **path `/api`**: Diteruskan langsung ke *Internal Load Balancer* **`geto`** (`192.212.4.2:80`) di Data Center, yang kemudian mendistribusikan beban ke API worker (`nanami`/`todo`).
+
+2. **Konfigurasi Path-Based Routing pada Node `gojo`**:
+   - Memasang berkas konfigurasi `/etc/nginx/sites-available/default` pada node `gojo`:
+     ```nginx
+     upstream frontend_cluster {
+         # Distribusi Round Robin ke worker frontend
+         server 192.212.4.3:80;   # maki
+         server 192.212.4.4:80;   # panda
+     }
+
+     server {
+         listen 80 default_server;
+         listen [::]:80 default_server;
+
+         server_name jujutsu.k02.com www.jujutsu.k02.com _;
+
+         # Perutean Root Web (/) ke Frontend Worker
+         location / {
+             proxy_pass http://frontend_cluster;
+             proxy_set_header Host $host;
+             proxy_set_header X-Real-IP $remote_addr;
+             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+             proxy_connect_timeout 2s;
+             proxy_read_timeout 3s;
+         }
+
+         # Perutean Endpoint /api ke Internal Balancer geto
+         location /api {
+             proxy_pass http://192.212.4.2;
+             proxy_set_header Host $host;
+             proxy_set_header X-Real-IP $remote_addr;
+             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+             proxy_connect_timeout 2s;
+             proxy_read_timeout 3s;
+         }
+     }
+     ```
+   - Memvalidasi sintaks dan memuat ulang layanan Nginx:
+     ```bash
+     nginx -t
+     service nginx restart
+     ```
+
+3. **Pengujian Verifikasi dari Klien (`itadori`)**:
+   - Dari konsol client `itadori`, dilakukan pengujian perutean menggunakan nama domain resmi:
+     - **Pengujian Root Web (`/`)**:
+       ```bash
+       curl -s http://jujutsu.k02.com/ | grep -A 1 'Worker Hostname'
+       curl -s http://jujutsu.k02.com/ | grep -A 1 'Worker Hostname'
+       ```
+       Permintaan berhasil dibalas oleh worker frontend secara bergantian (*Round Robin*), menampilkan `Worker Hostname: panda` dan `maki`.
+     - **Pengujian Endpoint API (`/api`)**:
+       ```bash
+       curl -s http://jujutsu.k02.com/api
+       ```
+       Permintaan langsung diteruskan melalui `geto` dan menghasilkan balasan JSON valid dari API worker (`nanami`/`todo`).
 
 ### Bukti dan Hasil
-- *Screenshot konfigurasi gojo*: `Screenshot/soal-16/gojo-routing.png`
-- *Screenshot uji akses root dan /api*: `Screenshot/soal-16/curl-endpoints.png`
+
+1. **Konfigurasi Path-Based Routing pada Nginx `gojo`**:
+   ![Konfigurasi Routing gojo](Screenshot/soal-16/gojo-routing.png)
+   *Menampilkan deklarasi upstream `frontend_cluster` dan perutean path-based untuk blok `location /` serta `location /api`.*
+
+2. **Pengujian Akses Root Web dan Endpoint `/api` dari Klien `itadori`**:
+   ![Uji Akses Root dan API](Screenshot/soal-16/curl-endpoints.png)
+   *Membuktikan akses ke domain utama jujutsu.k02.com/ dibalas oleh worker frontend (maki/panda) dan akses ke jujutsu.k02.com/api berhasil diteruskan ke API worker (nanami).*
 
 ---
 
@@ -1205,14 +1427,71 @@
 ### Soal
 > nanami dan todo merupakan worker API utama, sedangkan kirara disiapkan sebagai worker cadangan. Konfigurasikan upstream api_cluster pada geto agar kirara menjadi server backup, serta terapkan passive health check dengan parameter max_fails=2 dan fail_timeout=5s pada worker API utama. Pastikan kirara menjalankan layanan API yang kompatibel dengan endpoint utama. Simulasikan gangguan dengan menghentikan layanan Nginx atau layanan API pada nanami dan todo. Buktikan dari klien bahwa request ke /api dialihkan ke kirara dan menghasilkan respons API yang valid tanpa error 502 Bad Gateway.
 
-### Langkah Pengerjaan
-1. Penambahan parameter `backup`, `max_fails=2`, dan `fail_timeout=5s` pada upstream `geto`.
-2. Simulasi kegagalan pada `nanami` dan `todo`.
-3. Pembuktian failover request menuju `kirara` tanpa error 502.
+### Langkah Pengerjaan dan Implementasi
+
+1. **Analisis Kebutuhan High Availability & Failover**:
+   - Dalam arsitektur API di Data Center, **`nanami`** dan **`todo`** disiagakan sebagai pekerja utama, sedangkan **`kirara`** (`192.212.4.7:80`) ditetapkan sebagai worker cadangan (*hot-standby backup*).
+   - Agar *load balancer* tidak terus mengirim trafik ke server yang sedang mengalami masalah, diterapkan mekanisme **Passive Health Check**:
+     - `max_fails=2`: Menentukan ambang batas kegagalan. Jika sebuah worker gagal merespons sebanyak 2 kali berturut-turut, server tersebut langsung ditandai *down*.
+     - `fail_timeout=5s`: Menentukan jendela waktu penalti selama 5 detik, di mana Nginx tidak akan mengarahkan request baru ke server yang sedang *down*.
+     - Direktif `backup`: Menandai `kirara` hanya akan menerima limpahan trafik saat **seluruh** worker utama (`nanami` dan `todo`) tidak tersedia.
+
+2. **Pembaruan Konfigurasi Upstream pada `geto` (`/etc/nginx/sites-available/default`)**:
+   - Menambahkan parameter health check dan backup server pada blok `upstream api_cluster`:
+     ```nginx
+     upstream api_cluster {
+         # Worker API utama dengan Passive Health Check
+         server 192.212.4.5:80 weight=3 max_fails=2 fail_timeout=5s;   # nanami
+         server 192.212.4.6:80 weight=1 max_fails=2 fail_timeout=5s;   # todo
+
+         # Worker API cadangan (backup)
+         server 192.212.4.7:80 backup;                                  # kirara
+     }
+
+     server {
+         listen 80 default_server;
+         listen [::]:80 default_server;
+
+         server_name jujutsu.k02.com www.jujutsu.k02.com _;
+
+         location / {
+             proxy_pass http://api_cluster;
+             proxy_set_header Host $host;
+             proxy_set_header X-Real-IP $remote_addr;
+             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+             proxy_connect_timeout 2s;
+             proxy_read_timeout 3s;
+         }
+     }
+     ```
+   - Memvalidasi konfigurasi dan me-restart layanan:
+     ```bash
+     nginx -t
+     service nginx restart
+     ```
+
+3. **Simulasi Gangguan dan Pengujian Failover dari Klien (`itadori`)**:
+   - **Simulasi Gangguan**: Layanan Nginx pada kedua worker utama dihentikan secara bersamaan:
+     - Di `nanami`: `service nginx stop`
+     - Di `todo`: `service nginx stop`
+   - **Pengujian dari Klien**: Dari terminal client `itadori`, dikirimkan permintaan menuju endpoint `/api`:
+     ```bash
+     curl -s http://jujutsu.k02.com/api
+     ```
+   - **Hasil Failover**:
+     - Permintaan langsung ditangkap dan dilayani oleh worker cadangan **`kirara`**.
+     - Data respon JSON mengonfirmasi `"worker": "kirara"` dengan status `"success"`.
+     - Tidak terjadi error `502 Bad Gateway` pada klien, membuktikan proses transisi *failover* berlangsung secara transparan dan mulus.
 
 ### Bukti dan Hasil
-- *Screenshot upstream backup geto*: `Screenshot/soal-18/backup-upstream.png`
-- *Screenshot failover ke kirara*: `Screenshot/soal-18/failover-test.png`
+
+1. **Konfigurasi Upstream dengan Server Backup dan Passive Health Check di `geto`**:
+   ![Konfigurasi Upstream Backup geto](Screenshot/soal-18/backup-upstream.png)
+   *Menampilkan deklarasi upstream api_cluster yang dilengkapi parameter max_fails=2, fail_timeout=5s, serta direktif backup pada kirara.*
+
+2. **Pembuktian Otomatisasi Failover ke Worker Cadangan `kirara`**:
+   ![Uji Failover ke kirara](Screenshot/soal-18/failover-test.png)
+   *Membuktikan saat worker utama nanami dan todo mengalami gangguan, request /api langsung dialihkan ke kirara menghasilkan respon API valid tanpa error 502.*
 
 ---
 
@@ -1223,14 +1502,95 @@
 ### Soal
 > gojo bertugas mengoptimalkan layanan web sekaligus membatasi request berlebihan. Konfigurasikan Nginx Proxy Caching untuk halaman web frontend dengan masa berlaku cache 10 menit dan tambahkan header X-Cache-Status. Terapkan rate limiting pada path /api dengan batas 10 request per detik per IP klien. Buktikan bahwa request ke halaman web yang memenuhi syarat cache menghasilkan status MISS pada akses awal dan HIT pada akses berikutnya. Uji rate limiting secara terpisah dengan mengirimkan request beruntun ke /api, kemudian catat status respons yang dihasilkan ketika batas terlampaui.
 
-### Langkah Pengerjaan
-1. Konfigurasi `proxy_cache_path` dan header `X-Cache-Status $upstream_cache_status` pada `gojo`.
-2. Konfigurasi `limit_req_zone` 10r/s pada `location /api`.
-3. Pengujian cache (MISS lalu HIT) dan pengujian rate limit (respons 429 atau 503).
+### Langkah Pengerjaan dan Implementasi
+
+1. **Analisis Kebutuhan Optimasi Layanan Web dan Keamanan Akses**:
+   - **Proxy Caching**:
+     - Ditujukan untuk mempercepat pengiriman konten halaman web frontend (`/`) dan mengurangi beban komputasi serta latensi ke backend cluster (`maki` & `panda`).
+     - Menyimpan cache hasil respons HTTP 200 selama 10 menit (`proxy_cache_valid 200 10m;`).
+     - Menyediakan header pelacak status cache `X-Cache-Status` (`$upstream_cache_status`), yang bernilai `MISS` ketika konten pertama kali diambil dari upstream server, dan bernilai `HIT` saat disajikan langsung dari penyimpanan cache lokal di memori/disk `gojo`.
+   - **Rate Limiting**:
+     - Ditujukan untuk mencegah serangan Denial of Service (DoS) atau lonjakan request berlebihan pada endpoint sensitif (`/api`).
+     - Membatasi kuota request maksimal 10 request per detik (`rate=10r/s`) per IP address klien menggunakan algoritma *Leaky Bucket* berbasis `$binary_remote_addr`.
+     - Request yang melampaui batas ambang kapasitas burst langsung ditolak secara tegas dengan kode status HTTP `503 Service Temporarily Unavailable` (standar penolakan Nginx limit_req).
+
+2. **Penerapan Konfigurasi Cache dan Rate Limiting pada `gojo`**:
+   - Menambahkan definisi zona memori pada file `/etc/nginx/conf.d/proxy_optimize.conf`:
+     ```nginx
+     # Proxy Cache Zone: 10m keys zone, max 100m, inactive 60m
+     proxy_cache_path /var/cache/nginx levels=1:2 keys_zone=web_cache:10m max_size=100m inactive=60m use_temp_path=off;
+
+     # Rate Limiting Zone: 10 requests/second per client IP (Soal 19)
+     limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
+     ```
+   - Memperbarui virtual host `/etc/nginx/sites-available/default`:
+     ```nginx
+     upstream frontend_cluster {
+         server 192.212.4.3:80;   # maki
+         server 192.212.4.4:80;   # panda
+     }
+
+     server {
+         listen 80 default_server;
+         listen [::]:80 default_server;
+
+         server_name jujutsu.k02.com www.jujutsu.k02.com _;
+
+         # ── Frontend Web dengan Proxy Caching (10 Menit) ──
+         location / {
+             proxy_pass http://frontend_cluster;
+             proxy_set_header Host $host;
+             proxy_set_header X-Real-IP $remote_addr;
+             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+             proxy_connect_timeout 2s;
+             proxy_read_timeout 3s;
+
+             # Direktif Caching
+             proxy_cache web_cache;
+             proxy_cache_valid 200 10m;
+             add_header X-Cache-Status $upstream_cache_status;
+         }
+
+         # ── Endpoint API dengan Rate Limiting 10 req/s ──
+         location /api {
+             limit_req zone=api_limit burst=5 nodelay;
+
+             proxy_pass http://192.212.4.2;
+             proxy_set_header Host $host;
+             proxy_set_header X-Real-IP $remote_addr;
+             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+             proxy_connect_timeout 2s;
+             proxy_read_timeout 3s;
+         }
+     }
+     ```
+   - Membuat direktori penyimpanan cache dan mereload Nginx:
+     ```bash
+     mkdir -p /var/cache/nginx
+     chown -R www-data:www-data /var/cache/nginx
+     nginx -t
+     service nginx restart
+     ```
+
+3. **Verifikasi Pengujian dari Klien (`itadori`)**:
+   - **Pengujian Caching**:
+     - Mengirim request header ke web root `http://jujutsu.k02.com/` menggunakan `curl -sI`.
+     - Request awal menghasilkan respons dengan header `X-Cache-Status: MISS` karena data belum ada di cache.
+     - Request berikutnya pada detik yang sama langsung dilayani dengan header `X-Cache-Status: HIT` dari cache proxy.
+   - **Pengujian Rate Limiting**:
+     - Mengirimkan 15 request beruntun ke endpoint `http://jujutsu.k02.com/api` dalam waktu singkat.
+     - Request 1 sampai 7 berhasil diproses (`HTTP Status: 200`).
+     - Request 8 sampai 15 langsung terpotong dan ditolak oleh Nginx dengan kode status `HTTP Status: 503` (Service Temporarily Unavailable).
 
 ### Bukti dan Hasil
-- *Screenshot cache MISS & HIT*: `Screenshot/soal-19/cache-status.png`
-- *Screenshot rate limit response*: `Screenshot/soal-19/rate-limit.png`
+
+1. **Pembuktian Status Cache (MISS pada Akses Awal dan HIT pada Akses Berikutnya)**:
+   ![Bukti Cache MISS dan HIT](Screenshot/soal-19/cache-status.png)
+   *Menampilkan pengujian dari klien itadori: request pertama menghasilkan header `X-Cache-Status: MISS`, sedangkan request kedua pada konten yang sama langsung menghasilkan status `X-Cache-Status: HIT`.*
+
+2. **Pembuktian Penerapan Rate Limiting pada `/api`**:
+   ![Bukti Penolakan Rate Limit 503](Screenshot/soal-19/rate-limit.png)
+   *Membuktikan proteksi rate limiting: pengiriman request beruntun ke /api melampaui batas ambang, sehingga request ke-8 hingga ke-15 ditolak dengan HTTP Status: 503.*
 
 ---
 
