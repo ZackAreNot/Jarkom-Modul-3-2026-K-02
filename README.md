@@ -900,15 +900,6 @@
 
 ### Bukti dan Hasil
 
-1. **Konfigurasi BIND9 DNS Master (`utahime`) & DNS Slave (`shoko`)**:
-   ![Konfigurasi BIND9 Master](Screenshot/soal-11/bind9-master.png)
-   ![Konfigurasi BIND9 Slave](Screenshot/soal-11/bind9-slave.png)
-   *Menampilkan deklarasi zona `jujutsu.k02.com` type master pada `utahime` dengan `allow-transfer`, `also-notify`, SOA record, delegasi NS ke `utahime` & `shoko`, serta deklarasi type slave pada `shoko` yang berhasil menerima file zona di `/var/cache/bind/db.jujutsu.k02.com`.*
-
-2. **Verifikasi Query `dig` dari Klien ke Master (`utahime`) & Slave (`shoko`)**:
-   ![Query dig ke Master utahime](Screenshot/soal-11/dig-master.png)
-   ![Query dig ke Slave shoko](Screenshot/soal-11/dig-slave.png)
-   *Query `dig` dari klien `itadori` ke DNS Master `192.212.1.2` maupun DNS Slave `192.212.1.3` menghasilkan status NOERROR dan mengembalikan A record yang identik (`192.212.1.4`).*
 
 ---
 
@@ -994,8 +985,17 @@
      Klien berhasil me-resolve hostname `google.com` via DNS internal `192.212.1.2` dan melakukan ping ke internet dengan **0% packet loss**.
 
 ### Bukti dan Hasil
-- *Screenshot konfigurasi zona CNAME, PTR & Forwarder*: `Screenshot/soal-12/dns-conf.png`
-- *Screenshot verifikasi dig CNAME, PTR & ping google.com*: `Screenshot/soal-12/dig-ptr-ping.png`
+
+1. **Konfigurasi DNS Forwarder, Zona Forward CNAME, dan Zona Reverse PTR pada `utahime`**:
+   ![Konfigurasi Forwarder dan named.conf.local](Screenshot/soal-12/dns-conf-1.png)
+   ![Konfigurasi Zona Forward jujutsu.k02.com](Screenshot/soal-12/dns-conf-2.png)
+   ![Konfigurasi CNAME www dan Zona Reverse PTR](Screenshot/soal-12/dns-conf-3.png)
+   *Menampilkan konfigurasi `forwarders { 192.168.122.1; };` pada `named.conf.options`, deklarasi forward dan reverse zone pada `named.conf.local`, record `www IN CNAME jujutsu.k02.com.` pada `db.jujutsu.k02.com`, serta `4 IN PTR jujutsu.k02.com.` pada `db.192.212.1`.*
+
+2. **Verifikasi Query `dig` CNAME, Reverse PTR & Ping Domain Internet dari Klien `itadori`**:
+   ![Verifikasi dig CNAME www](Screenshot/soal-12/dig-cname.png)
+   ![Verifikasi dig PTR dan Ping google.com](Screenshot/soal-12/dig-ptr-ping.png)
+   *Membuktikan query CNAME me-resolve `www.jujutsu.k02.com` ke IP `192.212.1.4` (node `gojo`), query PTR `-x 192.212.1.4` mengembalikan domain resmi `jujutsu.k02.com.`, serta pengujian ping domain internet `google.com` berhasil 100% via DNS forwarder internal.*
 
 ---
 
