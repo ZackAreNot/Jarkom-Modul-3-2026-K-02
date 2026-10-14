@@ -899,8 +899,14 @@
    - Kedua server merespons dengan status `NOERROR`, mengembalikan A record `192.212.1.4` dan SOA serial `2026101402` yang identik.
 
 ### Bukti dan Hasil
-- *Screenshot konfigurasi BIND9 Master & Slave*: `Screenshot/soal-11/bind9-conf.png`
-- *Screenshot verifikasi sinkronisasi zona & dig client*: `Screenshot/soal-11/dig-verify.png`
+
+1. **Konfigurasi BIND9 DNS Master (`utahime`) & DNS Slave (`shoko`)**:
+   ![Konfigurasi BIND9 Master](Screenshot/soal-11/bind9-master.png)
+   ![Konfigurasi BIND9 Slave](Screenshot/soal-11/bind9-slave.png)
+   *Menampilkan deklarasi zona `jujutsu.k02.com` type master pada `utahime` dengan `allow-transfer`, `also-notify`, SOA record, delegasi NS ke `utahime` & `shoko`, serta deklarasi type slave pada `shoko` yang berhasil menerima file zona di `/var/cache/bind/db.jujutsu.k02.com`.*
+
+2. **Verifikasi Sinkronisasi Zona dan Query `dig` dari Klien**:
+   - *Screenshot verifikasi sinkronisasi zona & dig client*: `Screenshot/soal-11/dig-verify.png`
 
 ---
 
