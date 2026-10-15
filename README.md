@@ -126,19 +126,38 @@
 ### Bukti dan Hasil
 
 1. **Topologi Jaringan Lengkap di GNS3**:
+   - **Lingkungan**: Antarmuka GUI GNS3 Server (`http://10.4.89.246:80`, Project: `K-02-MODUL-3`)
    ![Topologi Modul 3](Screenshot/soal-1/topologi.png)
    *Topologi Jujutsu High (Shibuya Incident) dirancang sesuai skema soal pada project K-02-MODUL-3 di server GNS3.*
 
 2. **Verifikasi Alamat IP & Tabel Routing Router `jichi`**:
+   - **Node**: `jichi`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     ip -br addr
+     ip route
+     ```
    ![IP dan Routing jichi](Screenshot/soal-1/ip-route-jichi.png)
    *Antarmuka `eth0` memperoleh IP WAN via NAT DHCP (`192.168.122.x`), sedangkan `eth1` s.d. `eth4` aktif sebagai gateway ke 4 subnet LAN (`192.212.1.1` s.d. `192.212.4.1`). Tabel routing kernel mencakup seluruh subnet internal dan default route ke internet.*
 
 3. **Uji Konektivitas Host ke Default Gateway & Akses Internet (WAN NAT)**:
    - **Host `utahime` (Network 1 / DMZ)**:
+     - **Node**: `utahime`
+     - **Perintah Telnet / Terminal**:
+       ```bash
+       ping -c 3 192.212.1.1
+       ping -c 3 google.com
+       ```
      ![Uji Ping Utahime](Screenshot/soal-1/ping-utahime.png)
      *Node `utahime` berhasil melakukan ping ke default gateway `192.212.1.1` dan ping ke domain publik `google.com` dengan 0% packet loss.*
 
    - **Host `tengen` (Network 4 / Data Center)**:
+     - **Node**: `tengen`
+     - **Perintah Telnet / Terminal**:
+       ```bash
+       ping -c 3 192.212.4.1
+       ping -c 3 google.com
+       ```
      ![Uji Ping Tengen](Screenshot/soal-1/ping-tengen.png)
      *Node `tengen` berhasil melakukan ping ke default gateway `192.212.4.1` dan ping ke domain publik `google.com` dengan 0% packet loss.*
 
@@ -207,10 +226,23 @@
 ### Bukti dan Hasil
 
 1. **Konfigurasi Interface & `dhcpd.conf` pada Node `tengen`**:
+   - **Node**: `tengen`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     cat /etc/default/isc-dhcp-server
+     echo "---"
+     cat /etc/dhcp/dhcpd.conf
+     ```
    ![Konfigurasi dhcpd.conf](Screenshot/soal-2/dhcpd-conf.png)
    *Menampilkan isi `/etc/default/isc-dhcp-server` yang terikat pada `eth0`, serta `/etc/dhcp/dhcpd.conf` yang memuat deklarasi Network 4 tanpa pool dinamis dan deklarasi scope Network 2 & Network 3.*
 
 2. **Validasi Sintaks & Status Aktif Layanan ISC DHCP Server**:
+   - **Node**: `tengen`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     dhcpd -t -cf /etc/dhcp/dhcpd.conf
+     service isc-dhcp-server status
+     ```
    ![Status Service dhcpd](Screenshot/soal-2/service-status.png)
    *Uji sintaks `dhcpd -t -cf /etc/dhcp/dhcpd.conf` berhasil tanpa galat, layanan berstatus `dhcpd is running`, serta tidak ditemukan pesan galat "No subnet declaration" di sistem.*
 
@@ -275,15 +307,39 @@
 ### Bukti dan Hasil
 
 1. **Konfigurasi dan Status Layanan DHCP Relay pada Router `jichi`**:
+   - **Node**: `jichi`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     cat /etc/default/isc-dhcp-relay
+     ps aux | grep dhcrelay
+     ```
    ![Konfigurasi DHCP Relay](Screenshot/soal-3/relay-conf.png)
    *Menampilkan isi `/etc/default/isc-dhcp-relay` dengan server target `192.212.4.10` dan interface `eth2 eth3 eth4`, serta status proses `dhcrelay` yang berjalan aktif di router `jichi`.*
 
 2. **Perolehan Lease dan Konektivitas Klien Divisi A & Divisi B**:
    - **Klien `itadori` (Network 2 / Divisi A)**:
+     - **Node**: `itadori`
+     - **Perintah Telnet / Terminal**:
+       ```bash
+       udhcpc -i eth0 -n -q
+       ip -br addr
+       ip route
+       ping -c 3 192.212.2.1
+       ping -c 3 192.212.4.10
+       ```
      ![Perolehan IP Itadori](Screenshot/soal-3/client-itadori.png)
      *Klien `itadori` berhasil memperoleh konfigurasi IP `192.212.2.10/24` dari DHCP Server `tengen` melalui relay `jichi`, dengan rute default ke `192.212.2.1`, serta uji ping ke gateway dan server berhasil dengan 0% packet loss.*
 
    - **Klien `ino` (Network 3 / Divisi B)**:
+     - **Node**: `ino`
+     - **Perintah Telnet / Terminal**:
+       ```bash
+       udhcpc -i eth0 -n -q
+       ip -br addr
+       ip route
+       ping -c 3 192.212.3.1
+       ping -c 3 192.212.4.10
+       ```
      ![Perolehan IP Ino](Screenshot/soal-3/client-ino.png)
      *Klien `ino` berhasil memperoleh konfigurasi IP `192.212.3.10/24` dari DHCP Server `tengen` melalui relay `jichi`, dengan rute default ke `192.212.3.1`, serta uji ping ke gateway dan server berhasil dengan 0% packet loss.*
 
@@ -364,24 +420,53 @@
 ### Bukti dan Hasil
 
 1. **Konfigurasi Class, Subclass, dan Pool di Node `tengen`**:
+   - **Node**: `tengen`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     cat /etc/dhcp/dhcpd.conf
+     ```
    ![Konfigurasi Class dan Pool](Screenshot/soal-4/class-pool-conf.png)
    *Menampilkan konfigurasi `/etc/dhcp/dhcpd.conf` yang memuat class `pool-dev` dan `pool-support` dengan deklarasi subclass MAC address masing-masing node, serta pembagian dua pool terpisah (`range 192.212.2.10 192.212.2.35` dan `range 192.212.2.70 192.212.2.95`).*
 
 2. **Perolehan Alokasi IP Klien Tim Dev (Pool 1: `192.212.2.10` – `192.212.2.35`)**:
    - **Klien `itadori`**:
+     - **Node**: `itadori`
+     - **Perintah Telnet / Terminal**:
+       ```bash
+       udhcpc -i eth0 -n -q
+       ip -br addr
+       ```
      ![IP itadori](Screenshot/soal-4/ip-itadori.png)
      *Klien `itadori` (MAC: `02:42:01:94:12:00`) berhasil memperoleh IP `192.212.2.10/24` yang berada di dalam rentang Pool 1.*
 
    - **Klien `fushiguro`**:
+     - **Node**: `fushiguro`
+     - **Perintah Telnet / Terminal**:
+       ```bash
+       udhcpc -i eth0 -n -q
+       ip -br addr
+       ```
      ![IP fushiguro](Screenshot/soal-4/ip-fushiguro.png)
      *Klien `fushiguro` (MAC: `02:42:2d:a4:7c:00`) berhasil memperoleh IP `192.212.2.11/24` yang berada di dalam rentang Pool 1.*
 
 3. **Perolehan Alokasi IP Klien Tim Support (Pool 2: `192.212.2.70` – `192.212.2.95`)**:
    - **Klien `zenin`**:
+     - **Node**: `zenin`
+     - **Perintah Telnet / Terminal**:
+       ```bash
+       udhcpc -i eth0 -n -q
+       ip -br addr
+       ```
      ![IP zenin](Screenshot/soal-4/ip-zenin.png)
      *Klien `zenin` (MAC: `02:42:03:14:51:00`) berhasil memperoleh IP `192.212.2.70/24` yang berada di dalam rentang Pool 2.*
 
    - **Klien `okkotsu`**:
+     - **Node**: `okkotsu`
+     - **Perintah Telnet / Terminal**:
+       ```bash
+       udhcpc -i eth0 -n -q
+       ip -br addr
+       ```
      ![IP okkotsu](Screenshot/soal-4/ip-okkotsu.png)
      *Klien `okkotsu` (MAC: `f2:dd:ec:51:c9:cb`) berhasil memperoleh IP `192.212.2.71/24` yang berada di dalam rentang Pool 2.*
 
@@ -471,18 +556,40 @@
 ### Bukti dan Hasil
 
 1. **Konfigurasi Lease Time, Class & DHCP Options di Node `tengen`**:
+   - **Node**: `tengen`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     cat /etc/dhcp/dhcpd.conf
+     ```
    ![Konfigurasi Lease Time dan Options](Screenshot/soal-5/lease-conf.png)
    *Menampilkan konfigurasi `/etc/dhcp/dhcpd.conf` pada Network 3 dengan opsi DNS Server 192.212.1.2 & 192.212.1.3, domain-search k02.com, pool-short (1800s), dan pool-long (43200s).*
 
 2. **Perolehan Short Lease dan DNS Options Klien `ino` & `kusakabe`**:
+   - **Node**: `ino` dan `kusakabe`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     udhcpc -i eth0 -n -q
+     cat /etc/resolv.conf
+     ```
    ![Short Lease Client](Screenshot/soal-5/client-short-lease.png)
    *Klien `ino` dan `kusakabe` menerima IP dari rentang `192.212.3.10`–`192.212.3.89` dengan lease time 1800 detik (30 menit) serta `/etc/resolv.conf` berisi DNS dan search domain yang sesuai.*
 
 3. **Perolehan Long Lease dan DNS Options Klien `miwa`**:
+   - **Node**: `miwa`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     udhcpc -i eth0 -n -q
+     cat /etc/resolv.conf
+     ```
    ![Long Lease Client](Screenshot/soal-5/client-long-lease.png)
    *Klien `miwa` menerima IP dari rentang `192.212.3.100`–`192.212.3.199` dengan lease time 43200 detik (12 jam) serta `/etc/resolv.conf` berisi DNS dan search domain yang sesuai.*
 
 4. **Verifikasi Database Sewa di Server `tengen` (`dhcpd.leases`)**:
+   - **Node**: `tengen`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     cat /var/lib/dhcp/dhcpd.leases
+     ```
    ![Data Lease tengen](Screenshot/soal-5/dhcpd-leases.png)
    *Tabel lease pada `/var/lib/dhcp/dhcpd.leases` menunjukkan waktu `starts` dan `ends` dengan durasi 1800 detik (30 menit) untuk IP .3.10/.3.11 dan 43200 detik (12 jam) untuk IP .3.100.*
 
@@ -535,10 +642,27 @@
 ### Bukti dan Hasil
 
 1. **Konfigurasi Deklarasi Static Host di Server `tengen`**:
+   - **Node**: `tengen`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     cat /etc/dhcp/dhcpd.conf | grep -A 6 "host kugisaki"
+     ```
    ![Konfigurasi Fixed Address](Screenshot/soal-6/fixed-address-conf.png)
    *Menampilkan blok deklarasi `host kugisaki` dengan MAC address `02:42:88:94:88:00` dan `fixed-address 192.212.3.99` yang berada di luar seluruh rentang pool dinamis.*
 
 2. **Pembaruan Lease dan Alokasi IP Statis pada Node `kugisaki`**:
+   - **Node**: `kugisaki`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     pkill udhcpc
+     ip addr flush dev eth0
+     udhcpc -i eth0 -n -q
+     ip -br addr
+     ip route
+     cat /etc/resolv.conf
+     ping -c 3 192.212.3.1
+     ping -c 3 192.212.4.10
+     ```
    ![Renew IP kugisaki](Screenshot/soal-6/kugisaki-renew.png)
    *Proses renew lease melalui `udhcpc` membuktikan node `kugisaki` berhasil mendapatkan IP tetap `192.212.3.99/24`, memiliki default route dan resolv.conf yang benar, serta konektivitas ping lancar ke gateway dan server.*
 
@@ -592,10 +716,20 @@
 ### Bukti dan Hasil
 
 1. **Audit Konfigurasi Jaringan Klien Divisi A & Divisi B**:
+   - **Node**: Seluruh klien Network 2 & Network 3 (`itadori`, `fushiguro`, `zenin`, `okkotsu`, `ino`, `kusakabe`, `kugisaki`, `miwa`)
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     ip -4 addr show eth0 | grep inet; ip route; cat /etc/resolv.conf
+     ```
    ![Audit Klien](Screenshot/soal-7/audit-klien.png)
    *Menampilkan verifikasi IP (/24), broadcast address, default route, DNS (`192.212.1.2` & `192.212.1.3`), serta domain-search (`k02.com`) pada klien Network 2 dan Network 3.*
 
 2. **Kecocokan Database `/var/lib/dhcp/dhcpd.leases` pada Node `tengen`**:
+   - **Node**: `tengen`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     cat /var/lib/dhcp/dhcpd.leases
+     ```
    ![Database dhcpd.leases Bagian 1](Screenshot/soal-7/dhcpd-leases.png)
    ![Database dhcpd.leases Bagian 2](Screenshot/soal-7/dhcpd-leases-2.png)
    *Isi `/var/lib/dhcp/dhcpd.leases` di `tengen` memuat ketujuh lease aktif yang konsisten dengan MAC address, kebijakan pool, dan durasi sewa masing-masing klien.*
@@ -649,10 +783,20 @@
 ### Bukti dan Hasil
 
 1. **Urutan 4 Paket Transaksi DORA (`tcpdump -r /root/dora.pcap -n`)**:
+   - **Node**: `tengen`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     tcpdump -r /root/dora.pcap -n
+     ```
    ![Urutan Paket DORA](Screenshot/soal-8/dora-packets.png)
    *Menampilkan urutan 4 paket DHCP (`Request` $\rightarrow$ `Reply` $\rightarrow$ `Request` $\rightarrow$ `Reply`) antara relay `jichi` (`192.212.4.1` / `192.212.3.1`) dan server `tengen` (`192.212.4.10`) untuk klien `ino` (`02:42:c1:1e:00:00`).*
 
 2. **Detail Protokol DORA (`Discover` $\rightarrow$ `Offer` $\rightarrow$ `Request` $\rightarrow$ `ACK`) & Verifikasi Field `giaddr` (`tcpdump -r /root/dora.pcap -n -v`)**:
+   - **Node**: `tengen`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     tcpdump -r /root/dora.pcap -n -v
+     ```
    ![Detail DORA dan giaddr Bagian 1](Screenshot/soal-8/giaddr-detail.png)
    ![Detail DORA dan giaddr Bagian 2](Screenshot/soal-8/giaddr-detail-2.png)
    *Menampilkan rincian tahapan `Discover`, `Offer`, `Request`, dan `ACK` beserta nilai `Gateway-IP 192.212.3.1` (`giaddr` sesuai interface `eth3` pada `jichi`), `Your-IP 192.212.3.10`, `Server-ID 192.212.4.10`, dan `Lease-Time 1800`.*
@@ -718,13 +862,49 @@
 ### Bukti dan Hasil
 
 1. **Penghentian Service DHCP Relay di `jichi` & Gejala Kegagalan Lease pada `itadori`**:
-   ![Penghentian Relay di jichi](Screenshot/soal-9/jichi-relay-stop.png)
-   ![Kegagalan Lease saat Relay Down](Screenshot/soal-9/relay-failure.png)
+   - **Penghentian Relay di Node `jichi`**:
+     - **Node**: `jichi`
+     - **Perintah Telnet / Terminal**:
+       ```bash
+       service isc-dhcp-relay stop
+       service isc-dhcp-relay status
+       ```
+     ![Penghentian Relay di jichi](Screenshot/soal-9/jichi-relay-stop.png)
+   - **Gejala Kegagalan Lease di Node `itadori`**:
+     - **Node**: `itadori`
+     - **Perintah Telnet / Terminal**:
+       ```bash
+       pkill udhcpc
+       ip addr flush dev eth0
+       udhcpc -i eth0 -n -q -T 3
+       ip -br addr
+       ip route
+       ping -c 2 192.212.2.1
+       ```
+     ![Kegagalan Lease saat Relay Down](Screenshot/soal-9/relay-failure.png)
    *Saat `isc-dhcp-relay` dihentikan pada `jichi`, permintaan `udhcpc` pada `itadori` hanya mengirimkan `broadcasting discover` berulang kali hingga gagal (`udhcpc failed to get a DHCP lease`), kehilangan alamat IPv4 serta default route, dan ping gagal dengan `Network unreachable`.*
 
 2. **Pemulihan Service DHCP Relay di `jichi` & Kembalinya Alokasi IP dan Gateway pada `itadori`**:
-   ![Pemulihan Relay di jichi](Screenshot/soal-9/jichi-relay-start.png)
-   ![Pemulihan Lease saat Relay Aktif](Screenshot/soal-9/relay-recovered.png)
+   - **Pemulihan Relay di Node `jichi`**:
+     - **Node**: `jichi`
+     - **Perintah Telnet / Terminal**:
+       ```bash
+       service isc-dhcp-relay start
+       service isc-dhcp-relay status
+       ```
+     ![Pemulihan Relay di jichi](Screenshot/soal-9/jichi-relay-start.png)
+   - **Pemulihan Alokasi IP di Node `itadori`**:
+     - **Node**: `itadori`
+     - **Perintah Telnet / Terminal**:
+       ```bash
+       udhcpc -i eth0 -n -q
+       ip -br addr
+       ip route
+       cat /etc/resolv.conf
+       ping -c 2 192.212.2.1
+       ping -c 2 192.212.4.10
+       ```
+     ![Pemulihan Lease saat Relay Aktif](Screenshot/soal-9/relay-recovered.png)
    *Setelah `isc-dhcp-relay` diaktifkan kembali pada `jichi`, klien `itadori` berhasil memperoleh kembali IP `192.212.2.10/24` dari Pool 1 beserta default gateway semula (`192.212.2.1`) dan konektivitas ping ke gateway maupun server `tengen` (`192.212.4.10`) pulih 0% packet loss.*
 
 ---
@@ -786,16 +966,47 @@
 ### Bukti dan Hasil
 
 1. **Verifikasi Status *Autostart* DHCP Relay di `jichi` & DHCP Server di `tengen` Pasca-Restart**:
-   ![Status Autostart jichi](Screenshot/soal-10/autostart-jichi.png)
-   ![Status Autostart tengen](Screenshot/soal-10/autostart-status.png)
+   - **Autostart Relay di Node `jichi`**:
+     - **Node**: `jichi`
+     - **Perintah Telnet / Terminal**:
+       ```bash
+       ip -br addr
+       ip route
+       ls -l /etc/rc*.d/*dhcrelay*
+       ps aux | grep dhcrelay
+       ```
+     ![Status Autostart jichi](Screenshot/soal-10/autostart-jichi.png)
+   - **Autostart DHCP Server di Node `tengen`**:
+     - **Node**: `tengen`
+     - **Perintah Telnet / Terminal**:
+       ```bash
+       ip -br addr
+       ls -l /etc/rc*.d/*isc-dhcp*
+       ps aux | grep dhcpd
+       service isc-dhcp-server status
+       ```
+     ![Status Autostart tengen](Screenshot/soal-10/autostart-status.png)
    *Menampilkan bukti bahwa setelah kedua node di-restart, seluruh interface IP gateway, default route, symlink `/etc/rc2.d/S01isc-dhcp-*`, serta proses daemon `dhcrelay` (di `jichi`) dan `dhcpd` (di `tengen`) otomatis berjalan aktif.*
 
 2. **Verifikasi Persistensi Database Lease (`/var/lib/dhcp/dhcpd.leases`) & Kebijakan Pool di `tengen`**:
+   - **Node**: `tengen`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     cat /var/lib/dhcp/dhcpd.leases
+     ```
    ![Database Lease Pasca-Restart Bagian 1](Screenshot/soal-10/reboot-leases-1.png)
    ![Database Lease Pasca-Restart Bagian 2](Screenshot/soal-10/reboot-leases-2.png)
    *Menampilkan status `binding state active` untuk seluruh klien Network 2 (Pool 1 & Pool 2) dan Network 3 (Short Lease & Long Lease) yang tetap terjaga setelah restart.*
 
 3. **Verifikasi IP, Gateway, dan Konektivitas Klien Pasca-Restart**:
+   - **Node**: `itadori`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     udhcpc -i eth0 -n -q
+     ip -br addr
+     ip route
+     ping -c 3 192.212.4.10
+     ```
    ![Verifikasi Klien Pasca-Restart](Screenshot/soal-10/reboot-verify.png)
    *Membuktikan klien (`itadori` `192.212.2.10/24`) tetap memperoleh IP dari pool yang benar, memiliki default gateway `192.212.2.1`, dan berhasil melakukan ping ke DHCP Server `tengen` (`192.212.4.10`) dengan `0% packet loss`.*
 
@@ -901,13 +1112,44 @@
 ### Bukti dan Hasil
 
 1. **Konfigurasi BIND9 DNS Master (`utahime`) & DNS Slave (`shoko`)**:
-   ![Konfigurasi BIND9 Master](Screenshot/soal-11/bind9-master.png)
-   ![Konfigurasi BIND9 Slave](Screenshot/soal-11/bind9-slave.png)
+   - **Konfigurasi Master di Node `utahime`**:
+     - **Node**: `utahime`
+     - **Perintah Telnet / Terminal**:
+       ```bash
+       cat /etc/bind/named.conf.local
+       echo "---"
+       cat /etc/bind/zones/db.jujutsu.k02.com
+       service named status
+       ```
+     ![Konfigurasi BIND9 Master](Screenshot/soal-11/bind9-master.png)
+   - **Konfigurasi Slave di Node `shoko`**:
+     - **Node**: `shoko`
+     - **Perintah Telnet / Terminal**:
+       ```bash
+       cat /etc/bind/named.conf.local
+       ls -l /var/cache/bind/db.jujutsu.k02.com
+       service named status
+       ```
+     ![Konfigurasi BIND9 Slave](Screenshot/soal-11/bind9-slave.png)
    *Menampilkan deklarasi zona `jujutsu.k02.com` type master pada `utahime` dengan `allow-transfer`, `also-notify`, SOA record, delegasi NS ke `utahime` & `shoko`, serta deklarasi type slave pada `shoko` yang berhasil menerima file zona di `/var/cache/bind/db.jujutsu.k02.com`.*
 
 2. **Verifikasi Query `dig` dari Klien ke Master (`utahime`) & Slave (`shoko`)**:
-   ![Query dig ke Master utahime](Screenshot/soal-11/dig-master.png)
-   ![Query dig ke Slave shoko](Screenshot/soal-11/dig-slave.png)
+   - **Query ke Master `utahime` dari Node `itadori`**:
+     - **Node**: `itadori`
+     - **Perintah Telnet / Terminal**:
+       ```bash
+       dig @192.212.1.2 jujutsu.k02.com
+       dig @192.212.1.2 jujutsu.k02.com SOA
+       ```
+     ![Query dig ke Master utahime](Screenshot/soal-11/dig-master.png)
+   - **Query ke Slave `shoko` dari Node `itadori`**:
+     - **Node**: `itadori`
+     - **Perintah Telnet / Terminal**:
+       ```bash
+       dig @192.212.1.3 jujutsu.k02.com
+       dig @192.212.1.3 jujutsu.k02.com SOA
+       ```
+     ![Query dig ke Slave shoko](Screenshot/soal-11/dig-slave.png)
    *Query `dig` dari klien `itadori` ke DNS Master `192.212.1.2` maupun DNS Slave `192.212.1.3` menghasilkan status NOERROR dan mengembalikan A record yang identik (`192.212.1.4`).*
 
 ---
@@ -996,14 +1238,47 @@
 ### Bukti dan Hasil
 
 1. **Konfigurasi DNS Forwarder, Zona Forward CNAME, dan Zona Reverse PTR pada `utahime`**:
-   ![Konfigurasi Forwarder dan named.conf.local](Screenshot/soal-12/dns-conf-1.png)
-   ![Konfigurasi Zona Forward jujutsu.k02.com](Screenshot/soal-12/dns-conf-2.png)
-   ![Konfigurasi CNAME www dan Zona Reverse PTR](Screenshot/soal-12/dns-conf-3.png)
+   - **Forwarder & named.conf.local**:
+     - **Node**: `utahime`
+     - **Perintah Telnet / Terminal**:
+       ```bash
+       cat /etc/bind/named.conf.options
+       cat /etc/bind/named.conf.local
+       ```
+     ![Konfigurasi Forwarder dan named.conf.local](Screenshot/soal-12/dns-conf-1.png)
+   - **Zona Forward jujutsu.k02.com**:
+     - **Node**: `utahime`
+     - **Perintah Telnet / Terminal**:
+       ```bash
+       cat /etc/bind/zones/db.jujutsu.k02.com
+       ```
+     ![Konfigurasi Zona Forward jujutsu.k02.com](Screenshot/soal-12/dns-conf-2.png)
+   - **Zona Reverse PTR & Status BIND9**:
+     - **Node**: `utahime`
+     - **Perintah Telnet / Terminal**:
+       ```bash
+       cat /etc/bind/zones/db.192.212.1
+       service named status
+       ```
+     ![Konfigurasi CNAME www dan Zona Reverse PTR](Screenshot/soal-12/dns-conf-3.png)
    *Menampilkan konfigurasi `forwarders { 192.168.122.1; };` pada `named.conf.options`, deklarasi forward dan reverse zone pada `named.conf.local`, record `www IN CNAME jujutsu.k02.com.` pada `db.jujutsu.k02.com`, serta `4 IN PTR jujutsu.k02.com.` pada `db.192.212.1`.*
 
 2. **Verifikasi Query `dig` CNAME, Reverse PTR & Ping Domain Internet dari Klien `itadori`**:
-   ![Verifikasi dig CNAME www](Screenshot/soal-12/dig-cname.png)
-   ![Verifikasi dig PTR dan Ping google.com](Screenshot/soal-12/dig-ptr-ping.png)
+   - **Verifikasi dig CNAME `www`**:
+     - **Node**: `itadori`
+     - **Perintah Telnet / Terminal**:
+       ```bash
+       dig @192.212.1.2 www.jujutsu.k02.com
+       ```
+     ![Verifikasi dig CNAME www](Screenshot/soal-12/dig-cname.png)
+   - **Verifikasi dig Reverse PTR & Ping Internet**:
+     - **Node**: `itadori`
+     - **Perintah Telnet / Terminal**:
+       ```bash
+       dig @192.212.1.2 -x 192.212.1.4
+       ping -c 3 google.com
+       ```
+     ![Verifikasi dig PTR dan Ping google.com](Screenshot/soal-12/dig-ptr-ping.png)
    *Membuktikan query CNAME me-resolve `www.jujutsu.k02.com` ke IP `192.212.1.4` (node `gojo`), query PTR `-x 192.212.1.4` mengembalikan domain resmi `jujutsu.k02.com.`, serta pengujian ping domain internet `google.com` berhasil 100% via DNS forwarder internal.*
 
 ---
@@ -1116,11 +1391,28 @@
 ### Bukti dan Hasil
 
 1. **Status Replikasi MariaDB Slave pada Node `inumaki`**:
+   - **Node**: `inumaki`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     mariadb -e "SHOW SLAVE STATUS\G"
+     ```
    ![Status Replikasi Slave Bagian 1](Screenshot/soal-13/slave-status.png)
    ![Status Replikasi Slave Bagian 2](Screenshot/soal-13/slave-status-2.png)
    *Menampilkan output lengkap `SHOW SLAVE STATUS\G` pada inumaki dengan Slave_IO_Running: Yes, Slave_SQL_Running: Yes, Seconds_Behind_Master: 0, dan Master_Server_Id: 1.*
 
 2. **Pengujian Replikasi Data Nyata (Master -> Slave)**:
+   - **Penyisipan Data di Node `yaga` (Master)**:
+     - **Node**: `yaga`
+     - **Perintah Telnet / Terminal**:
+       ```bash
+       mariadb -D db_shibuya_k02 -e "INSERT INTO request_logs (worker_name, client_ip, proxy_ip, user_agent) VALUES ('yaga-master', '192.212.4.8', '192.212.4.8', 'Replication Verification Test');"
+       ```
+   - **Pemeriksaan Data Replikasi di Node `inumaki` (Slave)**:
+     - **Node**: `inumaki`
+     - **Perintah Telnet / Terminal**:
+       ```bash
+       mariadb -D db_shibuya_k02 -e "SELECT id, worker_name, client_ip, proxy_ip, user_agent, created_at FROM request_logs ORDER BY id DESC LIMIT 5;"
+       ```
    ![Uji Replikasi Data](Screenshot/soal-13/replication-test.png)
    *Menampilkan penambahan baris log di Master (yaga) dan verifikasi data yang otomatis tersinkronisasi di Slave (inumaki).*
 
