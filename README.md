@@ -136,9 +136,10 @@
      ```bash
      ip -br addr
      ip route
+     iptables -t nat -L POSTROUTING -n -v
      ```
    ![IP dan Routing jichi](Screenshot/soal-1/ip-route-jichi.png)
-   *Antarmuka `eth0` memperoleh IP WAN via NAT DHCP (`192.168.122.x`), sedangkan `eth1` s.d. `eth4` aktif sebagai gateway ke 4 subnet LAN (`192.212.1.1` s.d. `192.212.4.1`). Tabel routing kernel mencakup seluruh subnet internal dan default route ke internet.*
+   *Antarmuka `eth0` memperoleh IP WAN via NAT DHCP (`192.168.122.x`), sedangkan `eth1` s.d. `eth4` aktif sebagai gateway ke 4 subnet LAN (`192.212.1.1` s.d. `192.212.4.1`). Tabel routing kernel mencakup seluruh subnet internal dan default route ke internet, serta verifikasi aturan NAT Masquerade pada tabel POSTROUTING.*
 
 3. **Uji Konektivitas Host ke Default Gateway & Akses Internet (WAN NAT)**:
    - **Host `utahime` (Network 1 / DMZ)**:
@@ -230,7 +231,6 @@
    - **Perintah Telnet / Terminal**:
      ```bash
      cat /etc/default/isc-dhcp-server
-     echo "---"
      cat /etc/dhcp/dhcpd.conf
      ```
    ![Konfigurasi dhcpd.conf](Screenshot/soal-2/dhcpd-conf.png)
@@ -242,9 +242,10 @@
      ```bash
      dhcpd -t -cf /etc/dhcp/dhcpd.conf
      service isc-dhcp-server status
+     ps aux | grep dhcpd
      ```
    ![Status Service dhcpd](Screenshot/soal-2/service-status.png)
-   *Uji sintaks `dhcpd -t -cf /etc/dhcp/dhcpd.conf` berhasil tanpa galat, layanan berstatus `dhcpd is running`, serta tidak ditemukan pesan galat "No subnet declaration" di sistem.*
+   *Uji sintaks `dhcpd -t -cf /etc/dhcp/dhcpd.conf` berhasil tanpa galat, layanan berstatus `dhcpd is running`, daemon `dhcpd` terbukti aktif pada tabel proses, serta tidak ditemukan pesan galat "No subnet declaration" di sistem.*
 
 ---
 
@@ -321,11 +322,10 @@
      - **Node**: `itadori`
      - **Perintah Telnet / Terminal**:
        ```bash
-       udhcpc -i eth0 -n -q
        ip -br addr
        ip route
-       ping -c 3 192.212.2.1
-       ping -c 3 192.212.4.10
+       ping -c 2 192.212.2.1
+       ping -c 2 192.212.4.10
        ```
      ![Perolehan IP Itadori](Screenshot/soal-3/client-itadori.png)
      *Klien `itadori` berhasil memperoleh konfigurasi IP `192.212.2.10/24` dari DHCP Server `tengen` melalui relay `jichi`, dengan rute default ke `192.212.2.1`, serta uji ping ke gateway dan server berhasil dengan 0% packet loss.*
@@ -334,11 +334,10 @@
      - **Node**: `ino`
      - **Perintah Telnet / Terminal**:
        ```bash
-       udhcpc -i eth0 -n -q
        ip -br addr
        ip route
-       ping -c 3 192.212.3.1
-       ping -c 3 192.212.4.10
+       ping -c 2 192.212.3.1
+       ping -c 2 192.212.4.10
        ```
      ![Perolehan IP Ino](Screenshot/soal-3/client-ino.png)
      *Klien `ino` berhasil memperoleh konfigurasi IP `192.212.3.10/24` dari DHCP Server `tengen` melalui relay `jichi`, dengan rute default ke `192.212.3.1`, serta uji ping ke gateway dan server berhasil dengan 0% packet loss.*
@@ -433,8 +432,7 @@
      - **Node**: `itadori`
      - **Perintah Telnet / Terminal**:
        ```bash
-       udhcpc -i eth0 -n -q
-       ip -br addr
+       ip -br addr show eth0
        ```
      ![IP itadori](Screenshot/soal-4/ip-itadori.png)
      *Klien `itadori` (MAC: `02:42:01:94:12:00`) berhasil memperoleh IP `192.212.2.10/24` yang berada di dalam rentang Pool 1.*
@@ -443,8 +441,7 @@
      - **Node**: `fushiguro`
      - **Perintah Telnet / Terminal**:
        ```bash
-       udhcpc -i eth0 -n -q
-       ip -br addr
+       ip -br addr show eth0
        ```
      ![IP fushiguro](Screenshot/soal-4/ip-fushiguro.png)
      *Klien `fushiguro` (MAC: `02:42:2d:a4:7c:00`) berhasil memperoleh IP `192.212.2.11/24` yang berada di dalam rentang Pool 1.*
@@ -454,8 +451,7 @@
      - **Node**: `zenin`
      - **Perintah Telnet / Terminal**:
        ```bash
-       udhcpc -i eth0 -n -q
-       ip -br addr
+       ip -br addr show eth0
        ```
      ![IP zenin](Screenshot/soal-4/ip-zenin.png)
      *Klien `zenin` (MAC: `02:42:03:14:51:00`) berhasil memperoleh IP `192.212.2.70/24` yang berada di dalam rentang Pool 2.*
@@ -464,8 +460,7 @@
      - **Node**: `okkotsu`
      - **Perintah Telnet / Terminal**:
        ```bash
-       udhcpc -i eth0 -n -q
-       ip -br addr
+       ip -br addr show eth0
        ```
      ![IP okkotsu](Screenshot/soal-4/ip-okkotsu.png)
      *Klien `okkotsu` (MAC: `f2:dd:ec:51:c9:cb`) berhasil memperoleh IP `192.212.2.71/24` yang berada di dalam rentang Pool 2.*
@@ -564,31 +559,31 @@
    ![Konfigurasi Lease Time dan Options](Screenshot/soal-5/lease-conf.png)
    *Menampilkan konfigurasi `/etc/dhcp/dhcpd.conf` pada Network 3 dengan opsi DNS Server 192.212.1.2 & 192.212.1.3, domain-search k02.com, pool-short (1800s), dan pool-long (43200s).*
 
-2. **Perolehan Short Lease dan DNS Options Klien `ino` & `kusakabe`**:
-   - **Node**: `ino` dan `kusakabe`
+2. **Perolehan Short Lease dan DNS Options Klien `ino`**:
+   - **Node**: `ino`
    - **Perintah Telnet / Terminal**:
      ```bash
-     udhcpc -i eth0 -n -q
+     ip -br addr show eth0
      cat /etc/resolv.conf
      ```
    ![Short Lease Client](Screenshot/soal-5/client-short-lease.png)
-   *Klien `ino` dan `kusakabe` menerima IP dari rentang `192.212.3.10`–`192.212.3.89` dengan lease time 1800 detik (30 menit) serta `/etc/resolv.conf` berisi DNS dan search domain yang sesuai.*
+   *Klien `ino` menerima IP dari rentang short lease `192.212.3.10`–`192.212.3.89` serta `/etc/resolv.conf` berisi DNS `192.212.1.2`, `192.212.1.3`, dan search domain `k02.com`.*
 
 3. **Perolehan Long Lease dan DNS Options Klien `miwa`**:
    - **Node**: `miwa`
    - **Perintah Telnet / Terminal**:
      ```bash
-     udhcpc -i eth0 -n -q
+     ip -br addr show eth0
      cat /etc/resolv.conf
      ```
    ![Long Lease Client](Screenshot/soal-5/client-long-lease.png)
-   *Klien `miwa` menerima IP dari rentang `192.212.3.100`–`192.212.3.199` dengan lease time 43200 detik (12 jam) serta `/etc/resolv.conf` berisi DNS dan search domain yang sesuai.*
+   *Klien `miwa` menerima IP dari rentang long lease `192.212.3.100`–`192.212.3.199` serta `/etc/resolv.conf` berisi DNS `192.212.1.2`, `192.212.1.3`, dan search domain `k02.com`.*
 
 4. **Verifikasi Database Sewa di Server `tengen` (`dhcpd.leases`)**:
    - **Node**: `tengen`
    - **Perintah Telnet / Terminal**:
      ```bash
-     cat /var/lib/dhcp/dhcpd.leases
+     tail -n 35 /var/lib/dhcp/dhcpd.leases
      ```
    ![Data Lease tengen](Screenshot/soal-5/dhcpd-leases.png)
    *Tabel lease pada `/var/lib/dhcp/dhcpd.leases` menunjukkan waktu `starts` dan `ends` dengan durasi 1800 detik (30 menit) untuk IP .3.10/.3.11 dan 43200 detik (12 jam) untuk IP .3.100.*
@@ -645,7 +640,7 @@
    - **Node**: `tengen`
    - **Perintah Telnet / Terminal**:
      ```bash
-     cat /etc/dhcp/dhcpd.conf | grep -A 6 "host kugisaki"
+     tail -n 15 /etc/dhcp/dhcpd.conf
      ```
    ![Konfigurasi Fixed Address](Screenshot/soal-6/fixed-address-conf.png)
    *Menampilkan blok deklarasi `host kugisaki` dengan MAC address `02:42:88:94:88:00` dan `fixed-address 192.212.3.99` yang berada di luar seluruh rentang pool dinamis.*
@@ -654,14 +649,11 @@
    - **Node**: `kugisaki`
    - **Perintah Telnet / Terminal**:
      ```bash
-     pkill udhcpc
-     ip addr flush dev eth0
-     udhcpc -i eth0 -n -q
-     ip -br addr
+     ip -br addr show eth0
      ip route
      cat /etc/resolv.conf
-     ping -c 3 192.212.3.1
-     ping -c 3 192.212.4.10
+     ping -c 2 192.212.3.1
+     ping -c 2 192.212.4.10
      ```
    ![Renew IP kugisaki](Screenshot/soal-6/kugisaki-renew.png)
    *Proses renew lease melalui `udhcpc` membuktikan node `kugisaki` berhasil mendapatkan IP tetap `192.212.3.99/24`, memiliki default route dan resolv.conf yang benar, serta konektivitas ping lancar ke gateway dan server.*
@@ -728,7 +720,7 @@
    - **Node**: `tengen`
    - **Perintah Telnet / Terminal**:
      ```bash
-     cat /var/lib/dhcp/dhcpd.leases
+     grep -E "lease |starts|ends|hardware|binding state|\}" /var/lib/dhcp/dhcpd.leases
      ```
    ![Database dhcpd.leases Bagian 1](Screenshot/soal-7/dhcpd-leases.png)
    ![Database dhcpd.leases Bagian 2](Screenshot/soal-7/dhcpd-leases-2.png)
@@ -866,20 +858,14 @@
      - **Node**: `jichi`
      - **Perintah Telnet / Terminal**:
        ```bash
-       service isc-dhcp-relay stop
-       service isc-dhcp-relay status
+       service isc-dhcp-relay stop && pkill dhcrelay 2>/dev/null
        ```
      ![Penghentian Relay di jichi](Screenshot/soal-9/jichi-relay-stop.png)
    - **Gejala Kegagalan Lease di Node `itadori`**:
      - **Node**: `itadori`
      - **Perintah Telnet / Terminal**:
        ```bash
-       pkill udhcpc
-       ip addr flush dev eth0
-       udhcpc -i eth0 -n -q -T 3
-       ip -br addr
-       ip route
-       ping -c 2 192.212.2.1
+       pkill udhcpc 2>/dev/null; ip -4 addr flush dev eth0; udhcpc -i eth0 -t 3 -T 2 -n -q; ip -4 addr show eth0; ip route; ping -c 2 192.212.2.1
        ```
      ![Kegagalan Lease saat Relay Down](Screenshot/soal-9/relay-failure.png)
    *Saat `isc-dhcp-relay` dihentikan pada `jichi`, permintaan `udhcpc` pada `itadori` hanya mengirimkan `broadcasting discover` berulang kali hingga gagal (`udhcpc failed to get a DHCP lease`), kehilangan alamat IPv4 serta default route, dan ping gagal dengan `Network unreachable`.*
@@ -890,19 +876,13 @@
      - **Perintah Telnet / Terminal**:
        ```bash
        service isc-dhcp-relay start
-       service isc-dhcp-relay status
        ```
      ![Pemulihan Relay di jichi](Screenshot/soal-9/jichi-relay-start.png)
    - **Pemulihan Alokasi IP di Node `itadori`**:
      - **Node**: `itadori`
      - **Perintah Telnet / Terminal**:
        ```bash
-       udhcpc -i eth0 -n -q
-       ip -br addr
-       ip route
-       cat /etc/resolv.conf
-       ping -c 2 192.212.2.1
-       ping -c 2 192.212.4.10
+       udhcpc -i eth0 -O broadcast -O search -n -q && udhcpc -b -i eth0 -O broadcast -O search >/dev/null 2>&1; ip -4 addr show eth0 | grep inet; ip route; ping -c 2 192.212.2.1; ping -c 2 192.212.4.10
        ```
      ![Pemulihan Lease saat Relay Aktif](Screenshot/soal-9/relay-recovered.png)
    *Setelah `isc-dhcp-relay` diaktifkan kembali pada `jichi`, klien `itadori` berhasil memperoleh kembali IP `192.212.2.10/24` dari Pool 1 beserta default gateway semula (`192.212.2.1`) dan konektivitas ping ke gateway maupun server `tengen` (`192.212.4.10`) pulih 0% packet loss.*
@@ -970,20 +950,14 @@
      - **Node**: `jichi`
      - **Perintah Telnet / Terminal**:
        ```bash
-       ip -br addr
-       ip route
-       ls -l /etc/rc*.d/*dhcrelay*
-       ps aux | grep dhcrelay
+       ip -4 -br addr show; ps aux | grep [d]hcrelay; ls -l /etc/rc2.d/*isc-dhcp-relay* /etc/network/interfaces
        ```
      ![Status Autostart jichi](Screenshot/soal-10/autostart-jichi.png)
    - **Autostart DHCP Server di Node `tengen`**:
      - **Node**: `tengen`
      - **Perintah Telnet / Terminal**:
        ```bash
-       ip -br addr
-       ls -l /etc/rc*.d/*isc-dhcp*
-       ps aux | grep dhcpd
-       service isc-dhcp-server status
+       ip -4 -br addr show eth0; ip route; ps aux | grep [d]hcpd; ls -l /etc/rc2.d/*isc-dhcp-server* /etc/network/interfaces
        ```
      ![Status Autostart tengen](Screenshot/soal-10/autostart-status.png)
    *Menampilkan bukti bahwa setelah kedua node di-restart, seluruh interface IP gateway, default route, symlink `/etc/rc2.d/S01isc-dhcp-*`, serta proses daemon `dhcrelay` (di `jichi`) dan `dhcpd` (di `tengen`) otomatis berjalan aktif.*
@@ -992,7 +966,7 @@
    - **Node**: `tengen`
    - **Perintah Telnet / Terminal**:
      ```bash
-     cat /var/lib/dhcp/dhcpd.leases
+     grep -E 'lease 192\.212\.|hardware ethernet|binding state active' /var/lib/dhcp/dhcpd.leases
      ```
    ![Database Lease Pasca-Restart Bagian 1](Screenshot/soal-10/reboot-leases-1.png)
    ![Database Lease Pasca-Restart Bagian 2](Screenshot/soal-10/reboot-leases-2.png)
@@ -1002,10 +976,7 @@
    - **Node**: `itadori`
    - **Perintah Telnet / Terminal**:
      ```bash
-     udhcpc -i eth0 -n -q
-     ip -br addr
-     ip route
-     ping -c 3 192.212.4.10
+     ip -4 addr show eth0 | grep inet; ip route | grep default; ping -c 2 192.212.4.10
      ```
    ![Verifikasi Klien Pasca-Restart](Screenshot/soal-10/reboot-verify.png)
    *Membuktikan klien (`itadori` `192.212.2.10/24`) tetap memperoleh IP dari pool yang benar, memiliki default gateway `192.212.2.1`, dan berhasil melakukan ping ke DHCP Server `tengen` (`192.212.4.10`) dengan `0% packet loss`.*
@@ -1117,9 +1088,7 @@
      - **Perintah Telnet / Terminal**:
        ```bash
        cat /etc/bind/named.conf.local
-       echo "---"
        cat /etc/bind/zones/db.jujutsu.k02.com
-       service named status
        ```
      ![Konfigurasi BIND9 Master](Screenshot/soal-11/bind9-master.png)
    - **Konfigurasi Slave di Node `shoko`**:
@@ -1127,28 +1096,20 @@
      - **Perintah Telnet / Terminal**:
        ```bash
        cat /etc/bind/named.conf.local
-       ls -l /var/cache/bind/db.jujutsu.k02.com
-       service named status
+       ls -l /var/cache/bind/
        ```
      ![Konfigurasi BIND9 Slave](Screenshot/soal-11/bind9-slave.png)
    *Menampilkan deklarasi zona `jujutsu.k02.com` type master pada `utahime` dengan `allow-transfer`, `also-notify`, SOA record, delegasi NS ke `utahime` & `shoko`, serta deklarasi type slave pada `shoko` yang berhasil menerima file zona di `/var/cache/bind/db.jujutsu.k02.com`.*
 
 2. **Verifikasi Query `dig` dari Klien ke Master (`utahime`) & Slave (`shoko`)**:
-   - **Query ke Master `utahime` dari Node `itadori`**:
+   - **Query ke Master `utahime` & Slave `shoko` dari Node `itadori`**:
      - **Node**: `itadori`
      - **Perintah Telnet / Terminal**:
        ```bash
        dig @192.212.1.2 jujutsu.k02.com
-       dig @192.212.1.2 jujutsu.k02.com SOA
+       dig @192.212.1.3 jujutsu.k02.com
        ```
      ![Query dig ke Master utahime](Screenshot/soal-11/dig-master.png)
-   - **Query ke Slave `shoko` dari Node `itadori`**:
-     - **Node**: `itadori`
-     - **Perintah Telnet / Terminal**:
-       ```bash
-       dig @192.212.1.3 jujutsu.k02.com
-       dig @192.212.1.3 jujutsu.k02.com SOA
-       ```
      ![Query dig ke Slave shoko](Screenshot/soal-11/dig-slave.png)
    *Query `dig` dari klien `itadori` ke DNS Master `192.212.1.2` maupun DNS Slave `192.212.1.3` menghasilkan status NOERROR dan mengembalikan A record yang identik (`192.212.1.4`).*
 
@@ -1238,47 +1199,30 @@
 ### Bukti dan Hasil
 
 1. **Konfigurasi DNS Forwarder, Zona Forward CNAME, dan Zona Reverse PTR pada `utahime`**:
-   - **Forwarder & named.conf.local**:
-     - **Node**: `utahime`
-     - **Perintah Telnet / Terminal**:
-       ```bash
-       cat /etc/bind/named.conf.options
-       cat /etc/bind/named.conf.local
-       ```
-     ![Konfigurasi Forwarder dan named.conf.local](Screenshot/soal-12/dns-conf-1.png)
-   - **Zona Forward jujutsu.k02.com**:
-     - **Node**: `utahime`
-     - **Perintah Telnet / Terminal**:
-       ```bash
-       cat /etc/bind/zones/db.jujutsu.k02.com
-       ```
-     ![Konfigurasi Zona Forward jujutsu.k02.com](Screenshot/soal-12/dns-conf-2.png)
-   - **Zona Reverse PTR & Status BIND9**:
-     - **Node**: `utahime`
-     - **Perintah Telnet / Terminal**:
-       ```bash
-       cat /etc/bind/zones/db.192.212.1
-       service named status
-       ```
-     ![Konfigurasi CNAME www dan Zona Reverse PTR](Screenshot/soal-12/dns-conf-3.png)
+   - **Node**: `utahime`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     cat /etc/bind/named.conf.options
+     cat /etc/bind/named.conf.local
+     cat /etc/bind/zones/db.jujutsu.k02.com
+     cat /etc/bind/zones/db.192.212.1
+     ```
+   ![Konfigurasi Forwarder dan named.conf.local](Screenshot/soal-12/dns-conf-1.png)
+   ![Konfigurasi Zona Forward jujutsu.k02.com](Screenshot/soal-12/dns-conf-2.png)
+   ![Konfigurasi CNAME www dan Zona Reverse PTR](Screenshot/soal-12/dns-conf-3.png)
    *Menampilkan konfigurasi `forwarders { 192.168.122.1; };` pada `named.conf.options`, deklarasi forward dan reverse zone pada `named.conf.local`, record `www IN CNAME jujutsu.k02.com.` pada `db.jujutsu.k02.com`, serta `4 IN PTR jujutsu.k02.com.` pada `db.192.212.1`.*
 
 2. **Verifikasi Query `dig` CNAME, Reverse PTR & Ping Domain Internet dari Klien `itadori`**:
-   - **Verifikasi dig CNAME `www`**:
-     - **Node**: `itadori`
-     - **Perintah Telnet / Terminal**:
-       ```bash
-       dig @192.212.1.2 www.jujutsu.k02.com
-       ```
-     ![Verifikasi dig CNAME www](Screenshot/soal-12/dig-cname.png)
-   - **Verifikasi dig Reverse PTR & Ping Internet**:
-     - **Node**: `itadori`
-     - **Perintah Telnet / Terminal**:
-       ```bash
-       dig @192.212.1.2 -x 192.212.1.4
-       ping -c 3 google.com
-       ```
-     ![Verifikasi dig PTR dan Ping google.com](Screenshot/soal-12/dig-ptr-ping.png)
+   - **Node**: `itadori`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     dig @192.212.1.2 www.jujutsu.k02.com
+     dig @192.212.1.2 -x 192.212.1.4
+     cat /etc/resolv.conf
+     ping -c 3 google.com
+     ```
+   ![Verifikasi dig CNAME www](Screenshot/soal-12/dig-cname.png)
+   ![Verifikasi dig PTR dan Ping google.com](Screenshot/soal-12/dig-ptr-ping.png)
    *Membuktikan query CNAME me-resolve `www.jujutsu.k02.com` ke IP `192.212.1.4` (node `gojo`), query PTR `-x 192.212.1.4` mengembalikan domain resmi `jujutsu.k02.com.`, serta pengujian ping domain internet `google.com` berhasil 100% via DNS forwarder internal.*
 
 ---
@@ -1519,23 +1463,50 @@
 ### Bukti dan Hasil
 
 1. **Verifikasi Respon Frontend Worker (`maki`)**:
+   - **Node**: `maki`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     curl -s http://localhost
+     ```
    ![Respons Frontend Worker maki](Screenshot/soal-14/maki-response.png)
    *Menampilkan respon halaman web frontend dari worker maki yang menampilkan hostname 'maki' secara dinamis.*
 
 2. **Verifikasi Respon API Worker (`nanami`)**:
+   - **Node**: `nanami`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     curl -s http://localhost
+     ```
    ![Respons API Worker nanami](Screenshot/soal-14/nanami-response.png)
    *Menampilkan respon JSON dari endpoint API worker nanami yang memuat nama worker 'nanami' dan penanda waktu.*
 
 3. **Pengujian Pembatasan Akses Langsung dari Klien (`itadori`)**:
+   - **Node**: `itadori`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     curl -I http://192.212.4.3
+     curl -I http://192.212.4.5
+     ```
    ![Akses Langsung Klien Ditolak](Screenshot/soal-14/acl-itadori-deny.png)
    *Membuktikan permintaan langsung dari klien itadori ke maki (192.212.4.3) dan nanami (192.212.4.5) langsung ditolak dengan status HTTP 403 Forbidden.*
 
 4. **Pengujian Keberhasilan Akses Melalui Jalur Proxy (`gojo` & `geto`)**:
-   ![Akses Diterima dari Proxy gojo](Screenshot/soal-14/acl-gojo-allow.png)
-   *Membuktikan akses dari reverse proxy gojo menuju web worker maki (192.212.4.3) diizinkan dengan status HTTP 200 OK.*
-
-   ![Akses Diterima dari Load Balancer geto](Screenshot/soal-14/acl-geto-allow.png)
-   *Membuktikan akses dari internal load balancer geto menuju API worker nanami (192.212.4.5) diizinkan dengan status HTTP 200 OK.*
+   - **Akses dari Reverse Proxy `gojo` ke Web Worker `maki`**:
+     - **Node**: `gojo`
+     - **Perintah Telnet / Terminal**:
+       ```bash
+       curl -I http://192.212.4.3
+       ```
+     ![Akses Diterima dari Proxy gojo](Screenshot/soal-14/acl-gojo-allow.png)
+     *Membuktikan akses dari reverse proxy gojo menuju web worker maki (192.212.4.3) diizinkan dengan status HTTP 200 OK.*
+   - **Akses dari Internal Load Balancer `geto` ke API Worker `nanami`**:
+     - **Node**: `geto`
+     - **Perintah Telnet / Terminal**:
+       ```bash
+       curl -I http://192.212.4.5
+       ```
+     ![Akses Diterima dari Load Balancer geto](Screenshot/soal-14/acl-geto-allow.png)
+     *Membuktikan akses dari internal load balancer geto menuju API worker nanami (192.212.4.5) diizinkan dengan status HTTP 200 OK.*
 
 ---
 
@@ -1601,10 +1572,21 @@
 ### Bukti dan Hasil
 
 1. **Konfigurasi Upstream `api_cluster` di Node `geto`**:
+   - **Node**: `geto`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     cat /etc/nginx/sites-available/default
+     ```
    ![Konfigurasi Upstream geto](Screenshot/soal-15/geto-upstream.png)
    *Menampilkan blok deklarasi upstream `api_cluster` dengan server nanami (weight=3) dan todo (weight=1).*
 
 2. **Pembuktian Distribusi Rasio 3:1 Melalui Loop Request**:
+   - **Node**: `geto`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     bash /root/test_ratio.sh
+     ```
+   *Catatan: skrip `/root/test_ratio.sh` menjalankan loop 40 request: `for i in $(seq 1 40); do curl -s http://192.212.4.2 | grep '"worker"'; done | sort | uniq -c`.*
    ![Hasil Loop Request Rasio 3:1](Screenshot/soal-15/loop-ratio.png)
    *Membuktikan dari 40 request beruntun, nanami menerima 30 request dan todo menerima 10 request, menghasilkan rasio distribusi beban 3:1 secara akurat.*
 
@@ -1685,10 +1667,22 @@
 ### Bukti dan Hasil
 
 1. **Konfigurasi Path-Based Routing pada Nginx `gojo`**:
+   - **Node**: `gojo`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     cat /etc/nginx/sites-available/default
+     ```
    ![Konfigurasi Routing gojo](Screenshot/soal-16/gojo-routing.png)
    *Menampilkan deklarasi upstream `frontend_cluster` dan perutean path-based untuk blok `location /` serta `location /api`.*
 
 2. **Pengujian Akses Root Web dan Endpoint `/api` dari Klien `itadori`**:
+   - **Node**: `itadori`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     curl -s http://jujutsu.k02.com/ | grep -A 1 'Worker Hostname'
+     curl -s http://jujutsu.k02.com/ | grep -A 1 'Worker Hostname'
+     curl -s http://jujutsu.k02.com/api
+     ```
    ![Uji Akses Root dan API](Screenshot/soal-16/curl-endpoints.png)
    *Membuktikan akses ke domain utama jujutsu.k02.com/ dibalas oleh worker frontend (maki/panda) dan akses ke jujutsu.k02.com/api berhasil diteruskan ke API worker (nanami).*
 
@@ -1833,16 +1827,31 @@
 ### Bukti dan Hasil
 
 1. **Konfigurasi Header Forwarding dan Trusted Real IP pada Node `geto`**:
+   - **Node**: `geto`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     cat /etc/nginx/sites-available/default
+     ```
    ![Konfigurasi Trusted Real IP geto](Screenshot/soal-17/header-proxy.png)
    *Menampilkan konfigurasi Nginx pada geto dengan direktif set_real_ip_from 192.212.1.4 (gojo), real_ip_header X-Forwarded-For, serta penerusan header X-Real-IP ke worker backend.*
 
-2. **Bukti Pencatatan IP Asli Klien pada Database MariaDB `yaga`**:
-   ![Pencatatan Database Real IP yaga](Screenshot/soal-17/db-real-ip.png)
-   *Membuktikan bahwa request dari itadori tercatat dengan client_ip 192.212.2.10 dan kusakabe tercatat dengan client_ip 192.212.3.11 pada database yaga, tanpa tertukar dengan IP proxy perantara.*
-
-3. **Bukti Respon API Klien Menampilkan Verified Client IP**:
+2. **Bukti Respon API Klien Menampilkan Verified Client IP**:
+   - **Node**: `kusakabe`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     curl -s http://jujutsu.k02.com/api
+     ```
    ![Respon API Klien kusakabe](Screenshot/soal-17/client-response.png)
    *Menampilkan respons JSON dari endpoint /api ke klien kusakabe yang mengonfirmasi identifikasi client_ip 192.212.3.11 dan status db_log: saved_to_yaga.*
+
+3. **Bukti Pencatatan IP Asli Klien pada Database MariaDB `yaga`**:
+   - **Node**: `yaga`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     mariadb -D db_shibuya_k02 -e "SELECT id, worker_name, client_ip, proxy_ip, created_at FROM request_logs;"
+     ```
+   ![Pencatatan Database Real IP yaga](Screenshot/soal-17/db-real-ip.png)
+   *Membuktikan bahwa request dari itadori tercatat dengan client_ip 192.212.2.10 dan kusakabe tercatat dengan client_ip 192.212.3.11 pada database yaga, tanpa tertukar dengan IP proxy perantara.*
 
 ---
 
@@ -1912,10 +1921,27 @@
 ### Bukti dan Hasil
 
 1. **Konfigurasi Upstream dengan Server Backup dan Passive Health Check di `geto`**:
+   - **Node**: `geto`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     cat /etc/nginx/sites-available/default
+     ```
    ![Konfigurasi Upstream Backup geto](Screenshot/soal-18/backup-upstream.png)
    *Menampilkan deklarasi upstream api_cluster yang dilengkapi parameter max_fails=2, fail_timeout=5s, serta direktif backup pada kirara.*
 
 2. **Pembuktian Otomatisasi Failover ke Worker Cadangan `kirara`**:
+   - **Simulasi Gangguan di Worker Utama (`nanami` & `todo`)**:
+     - **Node**: `nanami` dan `todo`
+     - **Perintah Telnet / Terminal**:
+       ```bash
+       service nginx stop
+       ```
+   - **Pengujian Failover dari Klien `itadori`**:
+     - **Node**: `itadori`
+     - **Perintah Telnet / Terminal**:
+       ```bash
+       curl -s http://jujutsu.k02.com/api
+       ```
    ![Uji Failover ke kirara](Screenshot/soal-18/failover-test.png)
    *Membuktikan saat worker utama nanami dan todo mengalami gangguan, request /api langsung dialihkan ke kirara menghasilkan respon API valid tanpa error 502.*
 
@@ -2011,10 +2037,21 @@
 ### Bukti dan Hasil
 
 1. **Pembuktian Status Cache (MISS pada Akses Awal dan HIT pada Akses Berikutnya)**:
+   - **Node**: `itadori`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     curl -sI http://jujutsu.k02.com/
+     curl -sI http://jujutsu.k02.com/
+     ```
    ![Bukti Cache MISS dan HIT](Screenshot/soal-19/cache-status.png)
    *Menampilkan pengujian dari klien itadori: request pertama menghasilkan header `X-Cache-Status: MISS`, sedangkan request kedua pada konten yang sama langsung menghasilkan status `X-Cache-Status: HIT`.*
 
 2. **Pembuktian Penerapan Rate Limiting pada `/api`**:
+   - **Node**: `itadori`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     for i in $(seq 1 15); do echo -n "Request $i -> "; curl -s -o /dev/null -w "HTTP Status: %{http_code}\n" http://jujutsu.k02.com/api; done
+     ```
    ![Bukti Penolakan Rate Limit 503](Screenshot/soal-19/rate-limit.png)
    *Membuktikan proteksi rate limiting: pengiriman request beruntun ke /api melampaui batas ambang, sehingga request ke-8 hingga ke-15 ditolak dengan HTTP Status: 503.*
 
@@ -2083,14 +2120,29 @@
 ### Bukti dan Hasil
 
 1. **Hasil Apache Benchmark pada Web Utama (Baseline + Cache)**:
+   - **Node**: `kusakabe`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     ab -n 600 -c 30 http://jujutsu.k02.com/
+     ```
    ![Hasil Benchmark Web Utama](Screenshot/soal-20/ab-root.png)
    *Membuktikan performa web root dengan 600 request dan konkurensi 30 menghasilkan RPS 4749.39 #/detik dengan 0 failed requests.*
 
 2. **Hasil Apache Benchmark pada Endpoint `/api` (Efek Rate Limiting Aktif)**:
+   - **Node**: `kusakabe`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     ab -n 600 -c 30 http://jujutsu.k02.com/api
+     ```
    ![Hasil Benchmark API Rate Limiting](Screenshot/soal-20/ab-api.png)
    *Membuktikan proteksi rate limiting: 594 request berlebih ditolak dengan status Non-2xx (HTTP 503), tanpa adanya kegagalan koneksi jaringan.*
 
 3. **Pencatatan Drop Request pada Access Log `gojo`**:
+   - **Node**: `gojo`
+   - **Perintah Telnet / Terminal**:
+     ```bash
+     tail -n 20 /var/log/nginx/access.log
+     ```
    ![Access Log Drop Rate Limiting](Screenshot/soal-20/access-log.png)
    *Menampilkan pencatatan status HTTP 503 dari klien kusakabe (192.212.3.11) pada log akses gojo saat rate limit terlampaui.*
 
