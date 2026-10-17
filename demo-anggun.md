@@ -40,7 +40,7 @@ cat /etc/bind/zones/db.jujutsu.k02.com
 🗣️ **Yang Diucapkan ke Asprak:**
 > *"Permisi Kak, untuk Soal 11 mengenai implementasi DNS Master-Slave redundan antara utahime sebagai Master (192.212.1.2) dan shoko sebagai Slave (192.212.1.3).*  
 > *Pertama di node utahime, bisa dilihat pada file `named.conf.local`, zona `jujutsu.k02.com` diset sebagai `type master` dengan file zona di `/etc/bind/zones/db.jujutsu.k02.com`. Di sini kami menambahkan direktif `allow-transfer` dan `also-notify` yang dikunci khusus ke IP shoko (192.212.1.3) agar transfer zona aman dan tidak bisa di-download oleh sembarang pihak luar.*  
-> *Lalu pada file zona `db.jujutsu.k02.com`, kita memiliki SOA record dengan serial number `2026101402` (format YYYYMMDDNN: 14 Oktober 2026 revisi kedua setelah penambahan record Soal 12) sebagai penanda versi database zona agar Slave selalu tersinkronisasi."*
+> *Lalu pada file zona `db.jujutsu.k02.com`, bisa kita lihat SOA record menggunakan serial number `2026101402`. Formatnya adalah YYYYMMDDNN, yaitu tanggal 14 Oktober 2026 revisi ke-2. Nomor ini sengaja dinaikkan dari `01` ke `02` saat penambahan record CNAME dan A pada Soal 12, agar server Slave (shoko) otomatis mendeteksi adanya pembaruan data dan langsung melakukan sinkronisasi ulang Kak."*
 
 #### Step 2: Tunjukkan Konfigurasi di Slave (`shoko`)
 Jalankan di terminal `shoko`:
