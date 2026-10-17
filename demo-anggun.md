@@ -35,12 +35,12 @@ Membangun redundansi layanan DNS. `utahime` bertindak sebagai Master Server (pem
 Jalankan di terminal `utahime`:
 ```bash
 cat /etc/bind/named.conf.local
-cat /etc/bind/jujutsu/jujutsu.k02.com
+cat /etc/bind/zones/db.jujutsu.k02.com
 ```
 🗣️ **Yang Diucapkan ke Asprak:**
 > *"Permisi Kak, untuk Soal 11 mengenai implementasi DNS Master-Slave redundan antara utahime sebagai Master (192.212.1.2) dan shoko sebagai Slave (192.212.1.3).*  
-> *Pertama di node utahime, bisa dilihat pada file `named.conf.local`, zona `jujutsu.k02.com` diset sebagai `type master`. Di sini kami menambahkan direktif `allow-transfer` dan `also-notify` yang dikunci khusus ke IP shoko (192.212.1.3) agar transfer zona aman dan tidak bisa di-download oleh sembarang pihak luar.*  
-> *Lalu pada file zona, kita memiliki SOA record dengan serial number `2026101401` sebagai penanda versi database zona."*
+> *Pertama di node utahime, bisa dilihat pada file `named.conf.local`, zona `jujutsu.k02.com` diset sebagai `type master` dengan file zona di `/etc/bind/zones/db.jujutsu.k02.com`. Di sini kami menambahkan direktif `allow-transfer` dan `also-notify` yang dikunci khusus ke IP shoko (192.212.1.3) agar transfer zona aman dan tidak bisa di-download oleh sembarang pihak luar.*  
+> *Lalu pada file zona `db.jujutsu.k02.com`, kita memiliki SOA record dengan serial number `2026101401` sebagai penanda versi database zona."*
 
 #### Step 2: Tunjukkan Konfigurasi di Slave (`shoko`)
 Jalankan di terminal `shoko`:
@@ -108,6 +108,12 @@ ping -c 2 google.com
 ```
 🗣️ **Yang Diucapkan ke Asprak:**
 > *"Ketiga untuk Forwarder, di utahime kami mengonfigurasi `forwarders { 192.168.122.1; };`. Saat itadori meminta resolusi domain publik seperti `google.com` ke utahime, query tersebut berhasil diteruskan ke gateway internet dan dibalas dengan IP publik serta berhasil di-ping Kak."*
+
+*(Tips: Jika Asprak meminta melihat file konfigurasi aslinya di `utahime`, jalankan ini di utahime:)*
+```bash
+cat /etc/bind/zones/db.192.212.1      # File Zona Reverse PTR
+cat /etc/bind/named.conf.options     # File Konfigurasi Forwarders
+```
 
 ### 4. Prediksi Pertanyaan Asprak & Jawaban Cerdas
 - **T: Mengapa reverse DNS menggunakan format `in-addr.arpa` dan oktet IP-nya dibalik?**  
